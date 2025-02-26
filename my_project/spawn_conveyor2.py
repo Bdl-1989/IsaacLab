@@ -73,13 +73,38 @@ pancake_cfg_dict = {}
 CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Conveyors/ConveyorBelt_A09.usd",
-        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
-        mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+        # visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
+        # mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
         collision_props=sim_utils.CollisionPropertiesCfg(),
     ),
 )
 
+def spawn_object(i):
+    pancake_cfg_dict = {}
+    #This is for spawning objects onto the conveyor.
+    potential_y = [-0.40, -0.30, -0.18, -0.06, 0.06, 0.18, 0.30, 0.40] # idea make a map of potential y's and spawn them randomly
 
+    for index, value in enumerate(potential_y):
+        spawn_location = [-3.5, value, 1.8]
+        pancake = pancake_cfg.copy()
+        pancake.prim_path = "{ENV_REGEX_NS}/pancake_" + str(i+1) + "_" + str(index+1)
+
+        # pancake.init_state = RigidObjectCfg.InitialStateCfg(pos=spawn_location) 
+
+        key = f'pancake_{i+1}_{index+1}'
+        pancake_cfg_dict[key] = pancake.replace(prim_path="/World/envs/env_.*/"+key)
+
+  
+    return pancake_cfg_dict
+
+combined_dic = {}
+
+# Loop from 0 to 100 (inclusive)
+for i in range(2):
+    # Spawn the object and get the dictionary
+    current_dic = spawn_object(i)
+    # Combine it with the existing dictionary
+    combined_dic.update(current_dic)
 
 @configclass
 class PancakeSceneCfg(InteractiveSceneCfg):
@@ -96,59 +121,71 @@ class PancakeSceneCfg(InteractiveSceneCfg):
  
 
     conveyor: RigidObjectCfg = CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/conveyor")
-    pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects={})
 
 
-def spawn_object(i):
-    pancake_cfg_dict = {}
-    #This is for spawning objects onto the conveyor.
-    potential_y = [-0.40, -0.30, -0.18, -0.06, 0.06, 0.18, 0.30, 0.40] # idea make a map of potential y's and spawn them randomly
 
-    for index, value in enumerate(potential_y):
-        spawn_location = [-3.5, value, 1.8]
-        pancake = pancake_cfg.copy()
-        pancake.prim_path = "{ENV_REGEX_NS}/pancake_" + str(i+1) + "_" + str(index+1)
 
-        pancake.init_state = RigidObjectCfg.InitialStateCfg(pos=spawn_location) 
 
-        key = f'pancake_{i+1}_{index+1}'
-        pancake_cfg_dict[key] = pancake.replace(prim_path="/World/envs/env_.*/"+key)
+    pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
 
-  
-    return pancake_cfg_dict
 
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
- 
+
+
+    # conveyor_status = scene['conveyor'].data.default_root_state.clone()
+    # conveyor_status[:,:3] = conveyor_status[:,:3] - scene.env_origins
+    # conveyor_status[:,7] = 10
+    # scene['conveyor'].write_root_state_to_sim(conveyor_status)
+
+
+
+    pancake_objects = scene['pancake_collection'].cfg.rigid_objects
+    pancakes_status = scene['pancake_collection'].data.default_object_state.clone() 
+    pancakes_status[:,:,:3] = pancakes_status[:,:,:3] - scene.env_origins.unsqueeze(1)
+    initial_status = pancakes_status.clone()
     sim_dt = sim.get_physics_dt()
     sim_time = 0.0
     count = 0
     i = 0
+    batch = 8 
     # Simulate physics
     while simulation_app.is_running():
         # reset
-        if count % 500 == 0:
+        if count % (len(pancake_objects) * 15) == 0:
             # reset counters
             sim_time = 0.0
             count = 0
             i = 0
             # reset root state
-  
+            pancakes_status=initial_status.clone()
             # reset buffers 
 
             print("----------------------------------------")
             print("[INFO]: Resetting object state...")
+            scene['pancake_collection'].reset()
         # apply sim data 
 
 
-        if count % 4 ==0:
-            dict = spawn_object(i)
-            for key, value in dict.items():
-                scene['pancake_collection'].cfg.rigid_objects[key] = value 
-            i += 1
+        if count % 10 ==0:
+            potential_y = [-0.40, -0.30, -0.18, -0.06, 0.06, 0.18, 0.30, 0.40] # idea make a map of potential y's and spawn them randomly
+
+            for index, key in enumerate(pancake_objects.keys()):
+
+                if index >= i and index < i + batch:
+                    pancakes_status[:,index,0] += -3.5
+                    pancakes_status[:,index,1] += potential_y[index - i]
+                    pancakes_status[:,index,2] += 1.8 + 0.005 * i
+                 
+ 
+            # dict = spawn_object(i)
+            # for key, value in dict.items():
+            #     scene['pancake_collection'].cfg.rigid_objects[key] = value 
+            i += batch
             print("----------------------------------------")
             print("[INFO]: Spawn pancakes...")
+            scene['pancake_collection'].write_object_state_to_sim(pancakes_status, scene['pancake_collection']._ALL_ENV_INDICES, scene['pancake_collection']._ALL_OBJ_INDICES )
 
         # scene.write_data_to_sim()    
         # perform step
@@ -157,7 +194,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         sim_time += sim_dt
         count += 1
         # update buffers
-        # scene.update(sim_dt)
+        scene.update(sim_dt)
  
 
 
