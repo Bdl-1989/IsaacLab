@@ -68,16 +68,24 @@ pancake_cfg =  RigidObjectCfg(
 
 pancake_cfg_dict = {}
 
-
-
 CONVEYOR_CFG = RigidObjectCfg(
-    spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Conveyors/ConveyorBelt_A09.usd",
-        # visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
-        # mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-        collision_props=sim_utils.CollisionPropertiesCfg(),
-    ),
+    spawn=sim_utils.CuboidCfg(size=[8.0, 1.5, 3],
+                              collision_props=sim_utils.CollisionPropertiesCfg(),
+                              mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                              rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                                  kinematic_enabled=True,
+                              ),
+                              ),
 )
+
+# CONVEYOR_CFG = RigidObjectCfg(
+#     spawn=sim_utils.UsdFileCfg(
+#         usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Conveyors/ConveyorBelt_A09.usd",
+#         # visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
+#         # mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+#         collision_props=sim_utils.CollisionPropertiesCfg(),
+#     ),
+# )
 
 def spawn_object(i):
     pancake_cfg_dict = {}
@@ -100,7 +108,7 @@ def spawn_object(i):
 combined_dic = {}
 
 # Loop from 0 to 100 (inclusive)
-for i in range(2):
+for i in range(1):
     # Spawn the object and get the dictionary
     current_dic = spawn_object(i)
     # Combine it with the existing dictionary
@@ -153,7 +161,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # Simulate physics
     while simulation_app.is_running():
         # reset
-        if count % (len(pancake_objects) * 15) == 0:
+        if count % (len(pancake_objects) * 8 * 300) == 0:
             # reset counters
             sim_time = 0.0
             count = 0
@@ -168,7 +176,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         # apply sim data 
 
 
-        if count % 10 ==0:
+        if count % 300 ==0:
             potential_y = [-0.40, -0.30, -0.18, -0.06, 0.06, 0.18, 0.30, 0.40] # idea make a map of potential y's and spawn them randomly
 
             for index, key in enumerate(pancake_objects.keys()):
