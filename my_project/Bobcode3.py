@@ -180,7 +180,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     while simulation_app.is_running():
         # reset
 
-        if count % (len(pancake_objects)  * 200 / 8) == 0:
+        if i >len(pancake_objects):
             # reset counters
             sim_time = 0.0
             count = 0
@@ -195,7 +195,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             scene['conveyor'].reset()
             
         # apply sim data 
-
+        scene['pancake_collection'].reset()
+        scene['conveyor'].reset()
 
         if count % 200 ==0:
             pancakes_status = scene['pancake_collection'].data.object_state_w.clone() 
