@@ -58,13 +58,13 @@ outfeedVelocity = 0.1333
 infeed_y_offset = -0.5
 outfeed_y_offset = 0.1
 pancakes_per_container = 6
-infeed_gen_dist = 0.087
+infeed_gen_dist = 0.087 
 outfeed_gen_dist = 0.230
 
 pancake_cfg =  RigidObjectCfg(
         spawn=sim_utils.CylinderCfg(
-                radius=0.04,
-                height=0.005,
+                radius=0.045,
+                height=0.010,
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False),
                 mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                 collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -75,7 +75,7 @@ pancake_cfg =  RigidObjectCfg(
 
 container_cfg =  RigidObjectCfg(
         spawn=sim_utils.CuboidCfg(
-                size=(0.195,0.125 , 0.002),
+                size=(0.195,0.125 , 0.005),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False),
                 mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                 collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -254,7 +254,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                 containers_status[:, container_index, 0] = -3.5
                 containers_status[:, container_index, 1] = outfeed_y_offset
-                containers_status[:, container_index, 2] = 0.9 + 0.001
+                containers_status[:, container_index, 2] = 0.8 + 0.003
                 containers_status[:, container_index, 3] = 1.0
                 containers_status[:, container_index, 4] = 0.0
                 containers_status[:, container_index, 5] = 0.0
@@ -293,7 +293,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 if index >= i and index < i + batch:
                     pancakes_status[:,index,0] = -3.5
                     pancakes_status[:,index,1] = potential_y[index - i] + infeed_y_offset
-                    pancakes_status[:,index,2] = 1
+                    pancakes_status[:,index,2] = 0.9+0.005
                     pancakes_status[:,index,3] = 1.
                     pancakes_status[:,index,4] = 0.
                     pancakes_status[:,index,5] = 0.
