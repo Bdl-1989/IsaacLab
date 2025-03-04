@@ -58,8 +58,12 @@ outfeedVelocity = 0.1333
 infeed_y_offset = -0.5
 outfeed_y_offset = 0.1
 pancakes_per_container = 6
-infeed_gen_dist = 0.087 
+infeed_gen_dist = 0.095 
 outfeed_gen_dist = 0.230
+potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
+
+
+
 
 pancake_cfg =  RigidObjectCfg(
         spawn=sim_utils.CylinderCfg(
@@ -77,7 +81,7 @@ container_cfg =  RigidObjectCfg(
         spawn=sim_utils.CuboidCfg(
                 size=(0.195,0.125 , 0.005),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False),
-                mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                mass_props=sim_utils.MassPropertiesCfg(mass=6.0),
                 collision_props=sim_utils.CollisionPropertiesCfg(),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 1.0, 0.0), metallic=0.2),
             ),
@@ -90,7 +94,7 @@ pancake_cfg_dict = {}
 INFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[8.0, 1, 0.9],
                               collision_props=sim_utils.CollisionPropertiesCfg(),
-                              mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                              mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
                               ),
@@ -100,7 +104,7 @@ INFEED_CONVEYOR_CFG = RigidObjectCfg(
 OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[8.0, 0.2, 0.8],
                               collision_props=sim_utils.CollisionPropertiesCfg(),
-                              mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                              mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
                               ),
@@ -112,19 +116,17 @@ OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
 def spawn_object(i):
     pancake_cfg_dict = {}
     #This is for spawning objects onto the conveyor.
-    potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
-
-    for index, value in enumerate(potential_y):
-        spawn_location = [-3.5, infeed_y_offset - 1, 0]
+ 
+    for index in range(i):
+        spawn_location = [-3.5, infeed_y_offset - 2, 0]
         pancake = pancake_cfg.copy()
-        pancake.prim_path = "{ENV_REGEX_NS}/pancake_" + str(i+1) + "_" + str(index+1)
+        # pancake.prim_path = "{ENV_REGEX_NS}/pancake_" + str(i+1) + "_" + str(index+1)
 
         pancake.init_state = RigidObjectCfg.InitialStateCfg(pos=spawn_location) 
 
-        key = f'pancake_{i+1}_{index+1}'
+        key = f'pancake_{index+1}'
         pancake_cfg_dict[key] = pancake.replace(prim_path="/World/envs/env_.*/"+key)
 
-  
     return pancake_cfg_dict
 import math
 
@@ -147,13 +149,10 @@ def spawn_container(pancake_num):
 
 combined_dic = {}
 container_dic = {}
-
-# Loop from 0 to 100 (inclusive)
-for i in range(20):
+ 
     # Spawn the object and get the dictionary
-    current_dic = spawn_object(i)
-    # Combine it with the existing dictionary
-    combined_dic.update(current_dic)
+combined_dic = spawn_object(20 * len(potential_y) )
+    # Combine it with the existing dictionary 
 # spawn container based on the pancakes
 
 total_pancakes = len(combined_dic.keys())
@@ -209,7 +208,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # conveyor_status[:,:3] = conveyor_status[:,:3] - scene.env_origins
     # conveyor_status[:,7] = 10
     # scene['conveyor'].write_root_state_to_sim(conveyor_status)
-    potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
 
 
 
@@ -219,6 +217,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_time = 0.0
     count = 0
     i = 0
+    container_index = 0
     batch = len(potential_y)
     container_used_set = set() 
     pancake_used_set = set()
@@ -231,6 +230,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             sim_time = 0.0
             count = 0
             i = 0
+            container_index = 0
             container_used_set = set() 
             pancake_used_set = set()
             print("----------------------------------------")
@@ -238,60 +238,51 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             scene['pancake_collection'].reset()
             scene['infeed_conveyor'].reset()
             
-        # infeed generate distance 0.087 mm 
-        tolerance = 5e-4
-
-
-        if abs(outfeedVelocity * deltaT * count % outfeed_gen_dist) < tolerance:
-            containers_status = scene['container_collection'].data.object_state_w.clone() 
  
-            container_index = math.floor( i / pancakes_per_container)
+        if (outfeedVelocity * deltaT * count >= outfeed_gen_dist * container_index) and (outfeedVelocity * deltaT * (count-1) < outfeed_gen_dist * container_index):
+            containers_status = scene['container_collection'].data.object_state_w.clone() 
+            deltaX_container = outfeedVelocity * deltaT * count - outfeed_gen_dist * container_index  # need to suppliment the distance during increasing the time step
+            print(f"[INFO]: Spawn container when {deltaT * count}..and {deltaX_container =}.")
+ 
 
-            # Check if container_index exists in container_used_status
-            if container_index not in container_used_set:
-                # Add container_index into container_used_status
-                container_used_set.add(container_index)
+            containers_status[:, container_index, 0] = -3.5 +deltaX_container
+            containers_status[:, container_index, 1] = outfeed_y_offset
+            containers_status[:, container_index, 2] = 0.8 + 0.003
+            containers_status[:, container_index, 3] = 1.0
+            containers_status[:, container_index, 4] = 0.0
+            containers_status[:, container_index, 5] = 0.0
+            containers_status[:, container_index, 6] = 0.0
+            containers_status[:, container_index, 7] = 0.0
+            containers_status[:, container_index, 8] = 0.0
+            containers_status[:, container_index, 9] = 0.0
+            containers_status[:, container_index, 10] = 0.0
+            containers_status[:, container_index, 11] = 0.0
+            containers_status[:, container_index, 12] = 0.0
 
-                containers_status[:, container_index, 0] = -3.5
-                containers_status[:, container_index, 1] = outfeed_y_offset
-                containers_status[:, container_index, 2] = 0.8 + 0.003
-                containers_status[:, container_index, 3] = 1.0
-                containers_status[:, container_index, 4] = 0.0
-                containers_status[:, container_index, 5] = 0.0
-                containers_status[:, container_index, 6] = 0.0
-                containers_status[:, container_index, 7] = 0.0
-                containers_status[:, container_index, 8] = 0.0
-                containers_status[:, container_index, 9] = 0.0
-                containers_status[:, container_index, 10] = 0.0
-                containers_status[:, container_index, 11] = 0.0
-                containers_status[:, container_index, 12] = 0.0
+            containers_status[:, container_index, :3] = containers_status[:, container_index, :3] + scene.env_origins
+            # container_index = math.floor( i / pancakes_per_container)
 
-                containers_status[:, container_index, :3] = containers_status[:, container_index, :3] + scene.env_origins
-
-                scene.reset()
-                scene['container_collection'].write_object_com_state_to_sim(containers_status[:, container_index, :].unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index].unsqueeze(0))
-                
-                print("----------------------------------------")
-                print("[INFO]: Spawn containers...")
-
-
+            scene.reset()
+            scene['container_collection'].write_object_com_state_to_sim(containers_status[:, container_index, :].unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index].unsqueeze(0))
+            
+            print("----------------------------------------")
+            container_index +=1
 
 
 
 
-        if abs(infeedVelocity * deltaT * count % infeed_gen_dist) < tolerance:
-            print(f"[INFO]: Spawn when {deltaT * count}...")
+
+        
+        if (infeedVelocity * deltaT * count >= infeed_gen_dist * i / batch) and (infeedVelocity * deltaT * (count -1 ) > infeed_gen_dist * i /batch ):
+
             pancakes_status = scene['pancake_collection'].data.object_state_w.clone() 
             indices = []
-
-            # Check if container_index exists in container_used_status
-            if i not in pancake_used_set:
-                # Add container_index into container_used_status
-                pancake_used_set.add(i)
-
+            deltaX = infeedVelocity * deltaT * count - infeed_gen_dist * i / batch  # need to suppliment the distance during increasing the time step
+            print(f"[INFO]: Spawn pancake when {deltaT * count}..and {deltaX =}.")
+ 
             for index, key in enumerate(pancake_objects.keys()):
                 if index >= i and index < i + batch:
-                    pancakes_status[:,index,0] = -3.5
+                    pancakes_status[:,index,0] = -3.5 +  deltaX
                     pancakes_status[:,index,1] = potential_y[index - i] + infeed_y_offset
                     pancakes_status[:,index,2] = 0.9+0.005
                     pancakes_status[:,index,3] = 1.
@@ -311,7 +302,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 scene.reset()
                 scene['pancake_collection'].write_object_com_state_to_sim(pancakes_status[:,indices,:],None,scene['pancake_collection']._ALL_OBJ_INDICES[indices] ) 
                 print("----------------------------------------")
-                print("[INFO]: Spawn pancakes...")
+ 
  
 
 
