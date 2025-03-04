@@ -280,6 +280,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
 
         if abs(infeedVelocity * deltaT * count % infeed_gen_dist) < tolerance:
+            print(f"[INFO]: Spawn when {deltaT * count}...")
             pancakes_status = scene['pancake_collection'].data.object_state_w.clone() 
             indices = []
 
@@ -308,7 +309,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             i += batch
             if len(indices) > 0:
                 scene.reset()
-                scene['pancake_collection'].write_object_com_state_to_sim(pancakes_status[:,indices,:],None, ) 
+                scene['pancake_collection'].write_object_com_state_to_sim(pancakes_status[:,indices,:],None,scene['pancake_collection']._ALL_OBJ_INDICES[indices] ) 
                 print("----------------------------------------")
                 print("[INFO]: Spawn pancakes...")
  
