@@ -58,6 +58,8 @@ outfeedVelocity = 0.1333
 infeed_y_offset = -0.5
 outfeed_y_offset = 0.1
 pancakes_per_container = 6
+infeed_gen_dist = 0.087
+outfeed_gen_dist = 0.230
 
 pancake_cfg =  RigidObjectCfg(
         spawn=sim_utils.CylinderCfg(
@@ -152,8 +154,11 @@ for i in range(20):
     current_dic = spawn_object(i)
     # Combine it with the existing dictionary
     combined_dic.update(current_dic)
+# spawn container based on the pancakes
 
-container_dic = spawn_container(len(combined_dic.keys()))
+total_pancakes = len(combined_dic.keys())
+
+container_dic = spawn_container(total_pancakes)
 
 @configclass
 class PancakeSceneCfg(InteractiveSceneCfg):
@@ -215,6 +220,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     count = 0
     i = 0
     batch = len(potential_y)
+    container_used_set = set() 
+    pancake_used_set = set()
     # Simulate physics
     while simulation_app.is_running():
         # reset
@@ -224,7 +231,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             sim_time = 0.0
             count = 0
             i = 0
-
+            container_used_set = set() 
+            pancake_used_set = set()
             print("----------------------------------------")
             print("[INFO]: Resetting object state...")
             scene['pancake_collection'].reset()
@@ -232,9 +240,54 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             
         # infeed generate distance 0.087 mm 
         tolerance = 5e-4
-        if abs(infeedVelocity * deltaT * count % 0.087) < tolerance:
+
+
+        if abs(outfeedVelocity * deltaT * count % outfeed_gen_dist) < tolerance:
+            containers_status = scene['container_collection'].data.object_state_w.clone() 
+ 
+            container_index = math.floor( i / pancakes_per_container)
+
+            # Check if container_index exists in container_used_status
+            if container_index not in container_used_set:
+                # Add container_index into container_used_status
+                container_used_set.add(container_index)
+
+                containers_status[:, container_index, 0] = -3.5
+                containers_status[:, container_index, 1] = outfeed_y_offset
+                containers_status[:, container_index, 2] = 0.9 + 0.001
+                containers_status[:, container_index, 3] = 1.0
+                containers_status[:, container_index, 4] = 0.0
+                containers_status[:, container_index, 5] = 0.0
+                containers_status[:, container_index, 6] = 0.0
+                containers_status[:, container_index, 7] = 0.0
+                containers_status[:, container_index, 8] = 0.0
+                containers_status[:, container_index, 9] = 0.0
+                containers_status[:, container_index, 10] = 0.0
+                containers_status[:, container_index, 11] = 0.0
+                containers_status[:, container_index, 12] = 0.0
+
+                containers_status[:, container_index, :3] = containers_status[:, container_index, :3] + scene.env_origins
+
+                scene.reset()
+                scene['container_collection'].write_object_com_state_to_sim(containers_status[:, container_index, :].unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index].unsqueeze(0))
+                
+                print("----------------------------------------")
+                print("[INFO]: Spawn containers...")
+
+
+
+
+
+
+        if abs(infeedVelocity * deltaT * count % infeed_gen_dist) < tolerance:
             pancakes_status = scene['pancake_collection'].data.object_state_w.clone() 
             indices = []
+
+            # Check if container_index exists in container_used_status
+            if i not in pancake_used_set:
+                # Add container_index into container_used_status
+                pancake_used_set.add(i)
+
             for index, key in enumerate(pancake_objects.keys()):
                 if index >= i and index < i + batch:
                     pancakes_status[:,index,0] = -3.5
@@ -255,11 +308,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             i += batch
             if len(indices) > 0:
                 scene.reset()
-                scene['pancake_collection'].write_object_link_pose_to_sim(pancakes_status[..., :7])
-                scene['pancake_collection'].write_object_com_velocity_to_sim(pancakes_status[..., 7:])
+                scene['pancake_collection'].write_object_com_state_to_sim(pancakes_status[:,indices,:],None, ) 
                 print("----------------------------------------")
                 print("[INFO]: Spawn pancakes...")
-                scene.reset()
+ 
 
 
 
