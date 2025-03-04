@@ -52,6 +52,9 @@ import isaaclab.sim as sim_utils
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR,ISAAC_NUCLEUS_DIR
 
 
+deltaT = 0.01
+beltVelocity = 0.0467
+
 pancake_cfg =  RigidObjectCfg(
         spawn=sim_utils.CylinderCfg(
                 radius=0.04,
@@ -69,7 +72,7 @@ pancake_cfg =  RigidObjectCfg(
 pancake_cfg_dict = {}
 
 CONVEYOR_CFG = RigidObjectCfg(
-    spawn=sim_utils.CuboidCfg(size=[8.0, 1.5, 3],
+    spawn=sim_utils.CuboidCfg(size=[8.0, 1, 0.9],
                               collision_props=sim_utils.CollisionPropertiesCfg(),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
@@ -90,7 +93,7 @@ CONVEYOR_CFG = RigidObjectCfg(
 def spawn_object(i):
     pancake_cfg_dict = {}
     #This is for spawning objects onto the conveyor.
-    potential_y = [-0.40, -0.30, -0.18, -0.06, 0.06, 0.18, 0.30, 0.40] # idea make a map of potential y's and spawn them randomly
+    potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
 
     for index, value in enumerate(potential_y):
         spawn_location = [-3.5, value, 1.8]
@@ -130,19 +133,6 @@ class PancakeSceneCfg(InteractiveSceneCfg):
 
     conveyor: RigidObjectCfg = CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/conveyor")
 
-    pancake: RigidObjectCfg = RigidObjectCfg(
-    prim_path="{ENV_REGEX_NS}/pancake",spawn=sim_utils.CylinderCfg(
-                radius=0.04,
-                height=0.005,
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False),
-                mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-                collision_props=sim_utils.CollisionPropertiesCfg(),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 0.0, 1.0), metallic=0.2),
-            ),
-    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 3.0)),)
-
-
-
     pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
 
 
@@ -151,7 +141,7 @@ def move_conveyor():
     conveyor_prim = stage.GetPrimAtPath("/World/envs/env_0/conveyor")
     if conveyor_prim.IsValid():
         velocity_attr = conveyor_prim.GetAttribute("physics:velocity")
-        velocity_attr.Set((0.075,0,0)) #meters per second
+        velocity_attr.Set((beltVelocity,0,0)) #meters per second
         print("Velocity set!")
     else:
         print("Conveyor or conveyor velocity not found!")
@@ -166,6 +156,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # conveyor_status[:,:3] = conveyor_status[:,:3] - scene.env_origins
     # conveyor_status[:,7] = 10
     # scene['conveyor'].write_root_state_to_sim(conveyor_status)
+    potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
 
 
 
@@ -175,7 +166,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_time = 0.0
     count = 0
     i = 0
-    batch = 8 
+    batch = len(potential_y)
     # Simulate physics
     while simulation_app.is_running():
         # reset
@@ -194,41 +185,44 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             scene['pancake_collection'].reset()
             scene['conveyor'].reset()
             
-        # apply sim data 
-        scene['pancake_collection'].reset()
-        scene['conveyor'].reset()
-
-        if count % 200 ==0:
+        # 23 rows per minute
+        tolerance = 5e-4
+        if abs(beltVelocity * deltaT * count % 0.087) < tolerance:
+ 
             pancakes_status = scene['pancake_collection'].data.object_state_w.clone() 
-            potential_y = [-0.40, -0.30, -0.18, -0.06, 0.06, 0.18, 0.30, 0.40] # idea make a map of potential y's and spawn them randomly
             indices = []
-            scene['pancake_collection'].reset()
+            
             for index, key in enumerate(pancake_objects.keys()):
 
                 if index >= i and index < i + batch:
                     pancakes_status[:,index,0] = -3.5
                     pancakes_status[:,index,1] = potential_y[index - i]
-                    pancakes_status[:,index,2] = 1.8
-                    pancakes_status[:,index,3] = 1
-                    pancakes_status[:,index,4] = 0
-                    pancakes_status[:,index,5] = 0
-                    pancakes_status[:,index,6] = 0
-                    pancakes_status[:,index,7] = 0
-                    pancakes_status[:,index,8] = 0
-                    pancakes_status[:,index,9] = 0
-                    pancakes_status[:,index,10] = 0
-                    pancakes_status[:,index,11] = 0
-                    pancakes_status[:,index,12] = 0
+                    pancakes_status[:,index,2] = 1
+                    pancakes_status[:,index,3] = 1.
+                    pancakes_status[:,index,4] = 0.
+                    pancakes_status[:,index,5] = 0.
+                    pancakes_status[:,index,6] = 0.
+                    pancakes_status[:,index,7] = 0.
+                    pancakes_status[:,index,8] = 0.
+                    pancakes_status[:,index,9] = 0.
+                    pancakes_status[:,index,10] = 0.
+                    pancakes_status[:,index,11] = 0.
+                    pancakes_status[:,index,12] = 0.
                     indices.append(index)
                     pancakes_status[:,index,:3] = pancakes_status[:,index,:3] + scene.env_origins
  
             i += batch
             if len(indices) > 0:
+                scene.reset()
+                scene['pancake_collection'].write_object_link_pose_to_sim(pancakes_status[..., :7])
+                scene['pancake_collection'].write_object_com_velocity_to_sim(pancakes_status[..., 7:])
+                # robot
                 
                 print("----------------------------------------")
                 print("[INFO]: Spawn pancakes...")
-                scene['pancake_collection'].write_object_state_to_sim(pancakes_status, scene['pancake_collection']._ALL_ENV_INDICES, scene['pancake_collection']._ALL_OBJ_INDICES )
+                # scene['pancake_collection'].write_object_com_state_to_sim(pancakes_status, scene['pancake_collection']._ALL_ENV_INDICES, scene['pancake_collection']._ALL_OBJ_INDICES )
                 print('write')
+                scene.reset()
         # scene.write_data_to_sim()    
         # perform step
         sim.step()
@@ -243,14 +237,17 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
 
 def main():
+
     """Main function."""
  
 
     # Load kit helper
-    sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
+    # sim_cfg = sim_utils.SimulationCfg(dt=0.005,device=args_cli.device)
+    sim_cfg = sim_utils.SimulationCfg(dt=deltaT,device=args_cli.device)
+
     sim = SimulationContext(sim_cfg)
     # Set main camera
-    sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
+    sim.set_camera_view([2.5, 0.0, 8.0], [0.0, 0.0, 3.0])
     # Design scene
     scene_cfg = PancakeSceneCfg(num_envs=2, env_spacing=10.0)
     scene = InteractiveScene(scene_cfg)
