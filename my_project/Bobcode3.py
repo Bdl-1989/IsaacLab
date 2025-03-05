@@ -14,7 +14,7 @@
 
 import argparse
 from isaaclab.app import AppLauncher
-
+ 
 # For parsing and launching app do not modify unless you need custom arguments
 parser = argparse.ArgumentParser(description="Spawn a conveyor belt")
 AppLauncher.add_app_launcher_args(parser)
@@ -50,8 +50,8 @@ from isaaclab.utils import configclass
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 import isaaclab.sim as sim_utils
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR,ISAAC_NUCLEUS_DIR
-
-
+from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns
 deltaT = 0.01
 infeedVelocity = 0.0467
 outfeedVelocity = 0.1333
@@ -111,7 +111,25 @@ OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
                               ),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(0, outfeed_y_offset, 0.4)),
 )
- 
+
+MARKERS_CFG = VisualizationMarkersCfg( 
+        markers={
+            "pick_work_area": sim_utils.CuboidCfg(
+                size=(1.0, 1.0, 1.0),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
+            ),
+            "place_work_area": sim_utils.CuboidCfg(
+                size=(1.0, 1.0, 1.0),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
+            ),
+            "robot_limitation": sim_utils.ConeCfg(
+                radius=0.5,
+                height=1.0,
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 1.0, 0.0)),
+            ),
+
+        },
+    )
 
 def spawn_object(i):
     pancake_cfg_dict = {}
@@ -159,6 +177,8 @@ total_pancakes = len(combined_dic.keys())
 
 container_dic = spawn_container(total_pancakes)
 
+total_containers = len(container_dic.keys())
+
 @configclass
 class PancakeSceneCfg(InteractiveSceneCfg):
     """Configuration for a cart-pole scene."""
@@ -178,7 +198,7 @@ class PancakeSceneCfg(InteractiveSceneCfg):
 
 
     pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
-    container_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic)
+    container_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic) 
 
 
 def move_conveyor():
@@ -219,26 +239,37 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     i = 0
     container_index = 0
     batch = len(potential_y) 
+    pancake_offset_count = 0
+    container_offset_count = 0
     # Simulate physics
     while simulation_app.is_running():
         # reset
 
-        if i >len(pancake_objects):
+        if i >= total_pancakes:
             # reset counters
-            sim_time = 0.0
-            count = 0
+            # sim_time = 0.0
+            # count = 0
             i = 0
-            container_index = 0 
+            pancake_offset_count = count
+            # container_index = 0 
             print("----------------------------------------")
-            print("[INFO]: Resetting object state...")
+            print("[INFO]: Resetting pancakes state...")
+            scene['pancake_collection'].reset()
+            scene['infeed_conveyor'].reset()
+        if container_index >= total_containers:
+            container_index = 0 
+            container_offset_count = count
+            print("----------------------------------------")
+            print("[INFO]: Resetting containers state...")
             scene['pancake_collection'].reset()
             scene['infeed_conveyor'].reset()
             
  
-        if (outfeedVelocity * deltaT * count >= outfeed_gen_dist * container_index) and (outfeedVelocity * deltaT * (count-1) < outfeed_gen_dist * container_index):
-            containers_status = scene['container_collection'].data.object_state_w.clone() 
-            deltaX_container = outfeedVelocity * deltaT * count - outfeed_gen_dist * container_index  # need to suppliment the distance during increasing the time step
-            print(f"[INFO]: Spawn container when {deltaT * count}..and {deltaX_container =}.")
+        container_delta_count = count - container_offset_count
+        
+        if (outfeedVelocity * deltaT * container_delta_count >= outfeed_gen_dist * container_index) and (outfeedVelocity * deltaT * (container_delta_count-1) < outfeed_gen_dist * container_index):
+            deltaX_container = outfeedVelocity * deltaT * container_delta_count - outfeed_gen_dist * container_index  # need to suppliment the distance during increasing the time step
+            print(f"[INFO]: Spawn container when {deltaT * container_delta_count}..and {deltaX_container =}.")
  
             container_initial_status = [
                     -3.5 + deltaX_container, outfeed_y_offset, 0.8 + 0.003, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -247,23 +278,23 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
             container_initial_status_tensor[:,:3] += scene.env_origins
 
-            container_index +=1
+
             scene.reset()
             scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index].unsqueeze(0))
             
             print("----------------------------------------")
+            container_index +=1
 
 
 
 
 
-
-        
-        if (infeedVelocity * deltaT * count >= infeed_gen_dist * i / batch) and (infeedVelocity * deltaT * (count -1 ) > infeed_gen_dist * i /batch ):
+        pancake_delta_count = count - pancake_offset_count
+        if (infeedVelocity * deltaT * pancake_delta_count >= infeed_gen_dist * i / batch) and (infeedVelocity * deltaT * (pancake_delta_count -1 ) > infeed_gen_dist * i /batch ):
 
  
-            deltaX = infeedVelocity * deltaT * count - infeed_gen_dist * i / batch  # need to suppliment the distance during increasing the time step
-            print(f"[INFO]: Spawn pancake when {deltaT * count}..and {deltaX =}.")
+            deltaX = infeedVelocity * deltaT * pancake_delta_count - infeed_gen_dist * i / batch  # need to suppliment the distance during increasing the time step
+            print(f"[INFO]: Spawn pancake when {deltaT * pancake_delta_count}..and {deltaX =}.")
  
             pancakes_initial_status = torch.zeros(batch, 13, device=device)
             pancakes_initial_status[:, 0] = -3.5 + deltaX  # 广播机制
@@ -279,13 +310,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             pancakes_initial_status_tensor =  final_env_origins + pancakes_initial_status
 
             object_start_index = i
-            object_end_index = i + batch if i + batch <= total_pancakes - 1 else total_pancakes - 1
+            object_end_index = i + batch if i + batch <= total_pancakes - 1 else total_pancakes 
  
-            i += batch
-            scene.reset()
-            scene['pancake_collection'].write_object_com_state_to_sim(pancakes_initial_status_tensor,None,scene['pancake_collection']._ALL_OBJ_INDICES[object_start_index:object_end_index] ) 
-            print("----------------------------------------")
 
+            scene.reset()
+            scene['pancake_collection'].write_object_com_state_to_sim(pancakes_initial_status_tensor[:,object_start_index - i:object_end_index - i,:],None,scene['pancake_collection']._ALL_OBJ_INDICES[object_start_index:object_end_index] ) 
+            print("----------------------------------------")
+            i += batch
 
  
 
@@ -313,7 +344,7 @@ def main():
 
     sim = SimulationContext(sim_cfg)
     # Set main camera
-    sim.set_camera_view([2.5, 0.0, 8.0], [0.0, 0.0, 3.0])
+    sim.set_camera_view([4.5, 0.0, 8.0], [0.0, 0.0, 3.0])
     # Design scene
     scene_cfg = PancakeSceneCfg(num_envs=2, env_spacing=10.0)
     scene = InteractiveScene(scene_cfg)
