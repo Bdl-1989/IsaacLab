@@ -62,7 +62,7 @@ infeed_gen_dist = 0.095
 outfeed_gen_dist = 0.230
 potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
 
-
+device = "cuda:0"
 
 
 pancake_cfg =  RigidObjectCfg(
@@ -198,7 +198,7 @@ def move_conveyor():
     else:
         print("Outfeed conveyor or outfeed conveyor velocity not found!")
 
-
+import numpy as np
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
@@ -218,9 +218,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     count = 0
     i = 0
     container_index = 0
-    batch = len(potential_y)
-    container_used_set = set() 
-    pancake_used_set = set()
+    batch = len(potential_y) 
     # Simulate physics
     while simulation_app.is_running():
         # reset
@@ -230,9 +228,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             sim_time = 0.0
             count = 0
             i = 0
-            container_index = 0
-            container_used_set = set() 
-            pancake_used_set = set()
+            container_index = 0 
             print("----------------------------------------")
             print("[INFO]: Resetting object state...")
             scene['pancake_collection'].reset()
@@ -244,29 +240,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             deltaX_container = outfeedVelocity * deltaT * count - outfeed_gen_dist * container_index  # need to suppliment the distance during increasing the time step
             print(f"[INFO]: Spawn container when {deltaT * count}..and {deltaX_container =}.")
  
+            container_initial_status = [
+                    -3.5 + deltaX_container, outfeed_y_offset, 0.8 + 0.003, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                ]
+            container_initial_status_tensor = torch.zeros(len(scene['container_collection']._ALL_ENV_INDICES), 13, device=device)
+            container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
+            container_initial_status_tensor[:,:3] += scene.env_origins
 
-            containers_status[:, container_index, 0] = -3.5 +deltaX_container
-            containers_status[:, container_index, 1] = outfeed_y_offset
-            containers_status[:, container_index, 2] = 0.8 + 0.003
-            containers_status[:, container_index, 3] = 1.0
-            containers_status[:, container_index, 4] = 0.0
-            containers_status[:, container_index, 5] = 0.0
-            containers_status[:, container_index, 6] = 0.0
-            containers_status[:, container_index, 7] = 0.0
-            containers_status[:, container_index, 8] = 0.0
-            containers_status[:, container_index, 9] = 0.0
-            containers_status[:, container_index, 10] = 0.0
-            containers_status[:, container_index, 11] = 0.0
-            containers_status[:, container_index, 12] = 0.0
-
-            containers_status[:, container_index, :3] = containers_status[:, container_index, :3] + scene.env_origins
-            # container_index = math.floor( i / pancakes_per_container)
-
+            container_index +=1
             scene.reset()
-            scene['container_collection'].write_object_com_state_to_sim(containers_status[:, container_index, :].unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index].unsqueeze(0))
+            scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index].unsqueeze(0))
             
             print("----------------------------------------")
-            container_index +=1
+
 
 
 
@@ -275,37 +261,33 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         
         if (infeedVelocity * deltaT * count >= infeed_gen_dist * i / batch) and (infeedVelocity * deltaT * (count -1 ) > infeed_gen_dist * i /batch ):
 
-            pancakes_status = scene['pancake_collection'].data.object_state_w.clone() 
-            indices = []
+ 
             deltaX = infeedVelocity * deltaT * count - infeed_gen_dist * i / batch  # need to suppliment the distance during increasing the time step
             print(f"[INFO]: Spawn pancake when {deltaT * count}..and {deltaX =}.")
  
-            for index, key in enumerate(pancake_objects.keys()):
-                if index >= i and index < i + batch:
-                    pancakes_status[:,index,0] = -3.5 +  deltaX
-                    pancakes_status[:,index,1] = potential_y[index - i] + infeed_y_offset
-                    pancakes_status[:,index,2] = 0.9+0.005
-                    pancakes_status[:,index,3] = 1.
-                    pancakes_status[:,index,4] = 0.
-                    pancakes_status[:,index,5] = 0.
-                    pancakes_status[:,index,6] = 0.
-                    pancakes_status[:,index,7] = 0.
-                    pancakes_status[:,index,8] = 0.
-                    pancakes_status[:,index,9] = 0.
-                    pancakes_status[:,index,10] = 0.
-                    pancakes_status[:,index,11] = 0.
-                    pancakes_status[:,index,12] = 0.
-                    indices.append(index)
-                    pancakes_status[:,index,:3] = pancakes_status[:,index,:3] + scene.env_origins
+            pancakes_initial_status = torch.zeros(batch, 13, device=device)
+            pancakes_initial_status[:, 0] = -3.5 + deltaX  # 广播机制
+            pancakes_initial_status[:, 1] = torch.tensor(potential_y) + infeed_y_offset  # 直接加法
+            pancakes_initial_status[:, 2] = 0.9 + 0.005  # 广播机制
+            pancakes_initial_status[:, 3] = 1.0  # 广播机制
+
+            # 利用广播机制将 scene.env_origins 扩展到 [2, batch, 3]
+            expanded_env_origins = scene.env_origins[:, None, :]  # 形状变为 [2, 1, 3]
+            # 创建一个 [2, batch, 13] 的张量，前 3 列是 expanded_env_origins，其余为 0
+            final_env_origins = torch.zeros(len(scene['container_collection']._ALL_ENV_INDICES), batch, 13, device=device)
+            final_env_origins[:, :, :3] = expanded_env_origins  # 广播机制会自动扩展
+            pancakes_initial_status_tensor =  final_env_origins + pancakes_initial_status
+
+            object_start_index = i
+            object_end_index = i + batch if i + batch <= total_pancakes - 1 else total_pancakes - 1
+ 
             i += batch
-            if len(indices) > 0:
-                scene.reset()
-                scene['pancake_collection'].write_object_com_state_to_sim(pancakes_status[:,indices,:],None,scene['pancake_collection']._ALL_OBJ_INDICES[indices] ) 
-                print("----------------------------------------")
- 
- 
+            scene.reset()
+            scene['pancake_collection'].write_object_com_state_to_sim(pancakes_initial_status_tensor,None,scene['pancake_collection']._ALL_OBJ_INDICES[object_start_index:object_end_index] ) 
+            print("----------------------------------------")
 
 
+ 
 
 
         # perform step
@@ -327,7 +309,7 @@ def main():
 
     # Load kit helper
     # sim_cfg = sim_utils.SimulationCfg(dt=0.005,device=args_cli.device)
-    sim_cfg = sim_utils.SimulationCfg(dt=deltaT,device=args_cli.device)
+    sim_cfg = sim_utils.SimulationCfg(dt=deltaT,device=device)
 
     sim = SimulationContext(sim_cfg)
     # Set main camera
