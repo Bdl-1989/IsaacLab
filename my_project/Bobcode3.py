@@ -245,7 +245,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     while simulation_app.is_running():
         # reset
 
-        if i >= total_pancakes:
+        if i > total_pancakes:
             # reset counters
             # sim_time = 0.0
             # count = 0
