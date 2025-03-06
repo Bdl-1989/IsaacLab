@@ -52,7 +52,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR,ISAAC_NUCLEUS_DIR
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns
-deltaT = 0.05
+deltaT = 0.03
 infeedVelocity = 0.0467
 outfeedVelocity = 0.1333
 infeed_y_offset = -0.5
@@ -62,8 +62,10 @@ infeed_gen_dist = 0.095
 outfeed_gen_dist = 0.230
 potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of potential y's and spawn them randomly
 
-num_containers = math.ceil(8 / (outfeed_gen_dist+0.195))
-num_pancake_row = math.ceil(8/(infeed_gen_dist+0.09))
+item_veloctiy = 100 # m/s
+
+num_containers = math.ceil(4 / (outfeed_gen_dist+0.195))
+num_pancake_row = math.ceil(4/(infeed_gen_dist+0.09))
 
 device = "cuda:0"
 
@@ -95,24 +97,24 @@ container_cfg =  RigidObjectCfg(
 pancake_cfg_dict = {}
 
 INFEED_CONVEYOR_CFG = RigidObjectCfg(
-    spawn=sim_utils.CuboidCfg(size=[8.0, 1, 0.9],
+    spawn=sim_utils.CuboidCfg(size=[4.0, 1, 0.9],
                               collision_props=sim_utils.CollisionPropertiesCfg(),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
                               ),
                               ),
-    init_state=RigidObjectCfg.InitialStateCfg(pos=(0, infeed_y_offset, 0.45)),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(-2, infeed_y_offset, 0.45)),
 )
 OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
-    spawn=sim_utils.CuboidCfg(size=[8.0, 0.2, 0.8],
+    spawn=sim_utils.CuboidCfg(size=[4.0, 0.2, 0.8],
                               collision_props=sim_utils.CollisionPropertiesCfg(),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
                               ),
                               ),
-    init_state=RigidObjectCfg.InitialStateCfg(pos=(0, outfeed_y_offset, 0.4)),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(-2, outfeed_y_offset, 0.4)),
 )
 
  
@@ -181,16 +183,16 @@ class PancakeSceneCfg(InteractiveSceneCfg):
     container_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic) 
 
 
-def move_conveyor():
+def move_conveyor(i):
     stage = omni.usd.get_context().get_stage()
-    infeed_conveyor_prim = stage.GetPrimAtPath("/World/envs/env_0/infeed_conveyor")
+    infeed_conveyor_prim = stage.GetPrimAtPath(f"/World/envs/env_{i}/infeed_conveyor")
     if infeed_conveyor_prim.IsValid():
         velocity_attr = infeed_conveyor_prim.GetAttribute("physics:velocity")
         velocity_attr.Set((infeedVelocity,0,0)) #meters per second
         print("Velocity set!")
     else:
         print("Infeed conveyor or infeed conveyor velocity not found!")
-    outfeed_conveyor_prim = stage.GetPrimAtPath("/World/envs/env_0/outfeed_conveyor")
+    outfeed_conveyor_prim = stage.GetPrimAtPath(f"/World/envs/env_{i}/outfeed_conveyor")
     if outfeed_conveyor_prim.IsValid():
         velocity_attr = outfeed_conveyor_prim.GetAttribute("physics:velocity")
         velocity_attr.Set((outfeedVelocity,0,0)) #meters per second
@@ -203,13 +205,11 @@ import numpy as np
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
 
-    move_conveyor()
-    # conveyor_status = scene['conveyor'].data.default_root_state.clone()
-    # conveyor_status[:,:3] = conveyor_status[:,:3] - scene.env_origins
-    # conveyor_status[:,7] = 10
-    # scene['conveyor'].write_root_state_to_sim(conveyor_status)
-
+    # move_conveyor()
+    # for i in range(scene.num_envs):
+    #     move_conveyor(i)
  
+
     sim_dt = sim.get_physics_dt()
     sim_time = 0.0
     count = 0
@@ -218,14 +218,59 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     batch = len(potential_y) 
     pancake_offset_count = 0
     container_offset_count = 0
+    pick_workarea_1_movement = torch.zeros(2, 1)
     # Simulate physics
     while simulation_app.is_running():
         # reset
 
+        # pick 
+
+        pick_workarea_1_movement[:, 0] -= sim_dt * item_veloctiy
+
+        pancakes_xy_pos = scene['pancake_collection'].data.object_com_pos_w[:,:,:2]
+        pancakes_xy_pos -= scene.env_origins[:, None, :2]
+        
+        pick_workarea_1 = (pancakes_xy_pos[:, :, 0] > -2) & (pancakes_xy_pos[:, :, 0] < -1) & \
+                        (pancakes_xy_pos[:, :, 1] > -1) & (pancakes_xy_pos[:, :, 1] < 0) # 判断 x 坐标是否在 (-2, -1) 范围内，且 y 坐标在 (-1, 1) 范围内
+        if pick_workarea_1.any(): 
+
+            # 遍历第一个维度（0 和 1）
+            for i in range(scene.num_envs):
 
 
-            
+                if pick_workarea_1_movement[i] > 0:
+                    continue
+                # 获取当前维度的 True 索引
+                true_indices = torch.nonzero(pick_workarea_1[i])[:, 0]  # 取当前维度的索引
+
+                if len(true_indices) > 0:
+                    # 随机选择一个满足条件的索引
+                    
+                    random_index = true_indices[torch.randint(0, len(true_indices), (1,))].item()
+                    print(f"env_{i},随机选择的索引:", random_index)
+                    object_default_state = scene['pancake_collection'].data.default_object_state[i,random_index,:].clone()
+                    object_state = scene['pancake_collection'].data.object_com_pos_w[i,random_index,:].clone()
  
+                    distance = torch.norm(object_default_state[:3] - object_state, p=1)
+
+                    print(distance)  # 输出: tensor(9.)
+                    pick_workarea_1_movement[i] = distance
+                    
+                    object_default_state[:3] += scene.env_origins[i]
+                    scene['pancake_collection'].reset()
+                    scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
+                                                                            scene['pancake_collection']._ALL_ENV_INDICES[i].unsqueeze(0), \
+                                                                            scene['pancake_collection']._ALL_OBJ_INDICES[random_index].unsqueeze(0))
+                
+                else:
+                    print(f"env_{i},没有满足条件的点。")
+
+
+
+
+ 
+            
+        # cycle
         container_delta_count = count - container_offset_count
         
         if (outfeedVelocity * deltaT * container_delta_count >= outfeed_gen_dist * container_index) and (outfeedVelocity * deltaT * (container_delta_count-1) < outfeed_gen_dist * container_index):
@@ -326,7 +371,7 @@ def main():
     # Set main camera
     sim.set_camera_view([6.5, 0.0, 8.0], [0.0, 0.0, 3.0])
     # Design scene
-    scene_cfg = PancakeSceneCfg(num_envs=1, env_spacing=10.0)
+    scene_cfg = PancakeSceneCfg(num_envs=2, env_spacing=10.0)
     scene = InteractiveScene(scene_cfg)
     # Play the simulator
     sim.reset()
