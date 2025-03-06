@@ -98,7 +98,7 @@ pancake_cfg_dict = {}
 
 INFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[4.0, 1, 0.9],
-                              collision_props=sim_utils.CollisionPropertiesCfg(),
+                            #   collision_props=sim_utils.CollisionPropertiesCfg(),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
@@ -108,7 +108,7 @@ INFEED_CONVEYOR_CFG = RigidObjectCfg(
 )
 OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[4.0, 0.2, 0.8],
-                              collision_props=sim_utils.CollisionPropertiesCfg(),
+                            #   collision_props=sim_utils.CollisionPropertiesCfg(),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
@@ -127,7 +127,7 @@ def spawn_object(i):
         pancake = pancake_cfg.copy()
         # pancake.prim_path = "{ENV_REGEX_NS}/pancake_" + str(i+1) + "_" + str(index+1)
 
-        pancake.init_state = RigidObjectCfg.InitialStateCfg(pos=spawn_location) 
+        pancake.init_state = RigidObjectCfg.InitialStateCfg(pos=spawn_location ) 
 
         key = f'pancake_{index+1}'
         pancake_cfg_dict[key] = pancake.replace(prim_path="/World/envs/env_.*/"+key)
@@ -206,8 +206,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
 
     # move_conveyor()
-    for i in range(scene.num_envs):
-        move_conveyor(i)
+    # for i in range(scene.num_envs):
+    #     move_conveyor(i)
  
 
     sim_dt = sim.get_physics_dt()
@@ -223,6 +223,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     while simulation_app.is_running():
         # reset
 
+        # pick 
 
         pick_workarea_1_movement[:, 0] -= sim_dt * item_veloctiy
 
@@ -287,7 +288,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             
 
             container_initial_status = [
-                    -3.5 + deltaX_container, outfeed_y_offset, 0.8-0.001 , 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                    -3.5 + deltaX_container, outfeed_y_offset, 0.8  , 1.0, 0.0, 0.0, 0.0, outfeedVelocity, 0.0, 0.0, 0.0, 0.0, 0.0
                 ]
             container_initial_status_tensor = torch.zeros(len(scene['container_collection']._ALL_ENV_INDICES), 13, device=device)
             container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
@@ -296,7 +297,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
             scene['container_collection'].reset()
             scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index  ].unsqueeze(0))
-            
+            scene['container_collection'].update(sim_dt)
             print("----------------------------------------")
             container_index +=1
 
@@ -323,8 +324,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             pancakes_initial_status = torch.zeros(batch, 13, device=device)
             pancakes_initial_status[:, 0] = -3.5 + deltaX  # 广播机制
             pancakes_initial_status[:, 1] = torch.tensor(potential_y) + infeed_y_offset  # 直接加法
-            pancakes_initial_status[:, 2] = 0.9 - 0.001  # 广播机制
+            pancakes_initial_status[:, 2] = 0.9 + 0.005  # 广播机制
             pancakes_initial_status[:, 3] = 1.0  # 广播机制
+            pancakes_initial_status[:, 7] = infeedVelocity  # 广播机制
 
             # 利用广播机制将 scene.env_origins 扩展到 [2, batch, 3]
             expanded_env_origins = scene.env_origins[:, None, :]  # 形状变为 [2, 1, 3]
@@ -339,6 +341,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
             # scene['pancake_collection'].reset()
             scene['pancake_collection'].write_object_com_state_to_sim(pancakes_initial_status_tensor[:,object_start_index - i:object_end_index - i,:],None,scene['pancake_collection']._ALL_OBJ_INDICES[object_start_index:object_end_index] ) 
+            scene['pancake_collection'].update(sim_dt)
             print("----------------------------------------")
             i += batch
 
@@ -364,7 +367,7 @@ def main():
 
     # Load kit helper
     # sim_cfg = sim_utils.SimulationCfg(dt=0.005,device=args_cli.device)
-    sim_cfg = sim_utils.SimulationCfg(dt=deltaT,device=device)
+    sim_cfg = sim_utils.SimulationCfg(dt=deltaT,device=device, gravity = (0.,0.,0.))
 
     sim = SimulationContext(sim_cfg)
     # Set main camera
