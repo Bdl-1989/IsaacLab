@@ -13,10 +13,10 @@
 
 
 import argparse
-from isaaclab.app import AppLauncher
+from isaaclab.app import AppLauncher 
  
 # For parsing and launching app do not modify unless you need custom arguments
-parser = argparse.ArgumentParser(description="Spawn a conveyor belt")
+parser = argparse.ArgumentParser(description="111111")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -148,6 +148,19 @@ OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
     init_state=RigidObjectCfg.InitialStateCfg(pos=(-2, outfeed_y_offset, 0.4)),
 )
 
+PLACE_WORKAREA_1= RigidObjectCfg(
+    spawn=sim_utils.CuboidCfg(size=[0.5, 0.2, 0.2],
+                              collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
+                              mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                              visual_material=sim_utils.GlassMdlCfg(glass_color=(1.0, 0.0, 1.0),thin_walled=True),
+                              rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                                  kinematic_enabled=True,
+                              ),
+                              ),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(-2.75, outfeed_y_offset, 0.7)),
+    debug_vis = True
+)
+
  
 def spawn_object(i):
     pancake_cfg_dict = {}
@@ -198,7 +211,9 @@ class PancakeSceneCfg(InteractiveSceneCfg):
 
 
     # ground plane
-    ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg())
+    ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg(
+        physics_material = sim_utils.RigidBodyMaterialCfg(static_friction=1, dynamic_friction=1,restitution= 1)
+    ))
 
     # lights
     dome_light = AssetBaseCfg(
@@ -209,6 +224,7 @@ class PancakeSceneCfg(InteractiveSceneCfg):
     infeed_conveyor: RigidObjectCfg = INFEED_CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/infeed_conveyor")
     outfeed_conveyor: RigidObjectCfg = OUTFEED_CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/outfeed_conveyor")
 
+    place_work_area_1: RigidObjectCfg = PLACE_WORKAREA_1.replace(prim_path="{ENV_REGEX_NS}/place_work_area_1")
 
     pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
     container_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic) 
