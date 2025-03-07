@@ -64,8 +64,8 @@ potential_y = [-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4] # idea make a map of poten
 
 item_veloctiy = 10 # m/s
 
-num_containers = math.ceil(4 / (outfeed_gen_dist+0.195))
-num_pancake_row = math.ceil(4/(infeed_gen_dist+0.09))
+num_containers = math.ceil(4 / (outfeed_gen_dist)) 
+num_pancake_row = math.ceil(4/(infeed_gen_dist))
 
 device = "cuda:0"
 
@@ -74,9 +74,21 @@ pancake_cfg =  RigidObjectCfg(
         spawn=sim_utils.CylinderCfg(
                 radius=0.045,
                 height=0.010,
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(rigid_body_enabled= True,  
+                                                             kinematic_enabled=False,
+                                                             enable_gyroscopic_forces=False,
+                                                             retain_accelerations=False,
+                                                             solver_position_iteration_count=4, 
+                                                             solver_velocity_iteration_count=0,
+                                                             linear_damping=0.0,
+                                                             angular_damping=0.0,
+                                                             max_linear_velocity=1000.0,
+                                                             max_angular_velocity=1000.0,
+                                                             max_depenetration_velocity=1.0,
+                                                             sleep_threshold=0.05,
+                                                             stabilization_threshold=0.01,),
                 mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-                collision_props=sim_utils.CollisionPropertiesCfg(),
+                collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
             ),
         init_state=RigidObjectCfg.InitialStateCfg(),
@@ -85,9 +97,21 @@ pancake_cfg =  RigidObjectCfg(
 container_cfg =  RigidObjectCfg(
         spawn=sim_utils.CuboidCfg(
                 size=(0.195,0.125 , 0.005),
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(rigid_body_enabled= True,  
+                                                             kinematic_enabled=False,
+                                                             enable_gyroscopic_forces=False,
+                                                             retain_accelerations=False,
+                                                             solver_position_iteration_count=4, 
+                                                             solver_velocity_iteration_count=0,
+                                                             linear_damping=0.0,
+                                                             angular_damping=0.0,
+                                                             max_linear_velocity=1000.0,
+                                                             max_angular_velocity=1000.0,
+                                                             max_depenetration_velocity=1.0,
+                                                             sleep_threshold=0.05,
+                                                             stabilization_threshold=0.01,),
                 mass_props=sim_utils.MassPropertiesCfg(mass=6.0),
-                collision_props=sim_utils.CollisionPropertiesCfg(),
+                collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 1.0, 0.0), metallic=0.2),
             ),
         init_state=RigidObjectCfg.InitialStateCfg(),
@@ -98,20 +122,22 @@ pancake_cfg_dict = {}
 
 INFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[4.0, 1, 0.9],
-                              collision_props=sim_utils.CollisionPropertiesCfg(),
+                              collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
+                                  linear_damping=10.0,
                               ),
                               ),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(-2, infeed_y_offset, 0.45)),
 )
 OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[4.0, 0.2, 0.8],
-                              collision_props=sim_utils.CollisionPropertiesCfg(),
+                              collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
+                                  linear_damping=10.0,
                               ),
                               ),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(-2, outfeed_y_offset, 0.4)),
@@ -123,7 +149,7 @@ def spawn_object(i):
     #This is for spawning objects onto the conveyor.
  
     for index in range(i):
-        spawn_location = [-3.5, infeed_y_offset - 2, index* 0.01]
+        spawn_location = [-3.5, infeed_y_offset - 2, index* 0.01 +0.01]
         pancake = pancake_cfg.copy()
         # pancake.prim_path = "{ENV_REGEX_NS}/pancake_" + str(i+1) + "_" + str(index+1)
 
@@ -139,7 +165,7 @@ def spawn_container(container_num):
     container_cfg_dict={}
     num = math.ceil(container_num)
     for i in range(num):
-        spawn_location = [-3.5, outfeed_y_offset + 1, 0.005 * i]
+        spawn_location = [-3.5, outfeed_y_offset + 1, 0.005 * i +0.1]
         container = container_cfg.copy()
         container.init_state = RigidObjectCfg.InitialStateCfg(pos=spawn_location) 
 
@@ -223,7 +249,37 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     while simulation_app.is_running():
         # reset
 
+ 
+        pick_reset_area = (scene['pancake_collection'].data.object_com_pos_w[:, :, 0] -  scene.env_origins[:, None, 0])> 0 
+        if pick_reset_area.any(): 
+            for env_i in range(scene.num_envs):
+                true_indices = torch.nonzero(pick_reset_area[env_i])[:, 0]  # 取当前维度的索引
+                for true_i in true_indices:
+                    object_default_state = scene['pancake_collection'].data.default_object_state[env_i,true_i,:].clone() 
+                    object_default_state[:3] += scene.env_origins[env_i]
+                    
+                    scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
+                                                                            scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
+                                                                            scene['pancake_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
+                    scene['pancake_collection'].reset()
+                    scene['pancake_collection'].update(sim_dt)
 
+ 
+        container_reset_area = (scene['container_collection'].data.object_com_pos_w[:, :, 0]-  scene.env_origins[:, None, 0] )   > 0
+        if container_reset_area.any(): 
+            for env_i in range(scene.num_envs):
+                true_indices = torch.nonzero(container_reset_area[env_i])[:, 0]  # 取当前维度的索引
+                for true_i in true_indices:
+                    object_default_state = scene['container_collection'].data.default_object_state[env_i,true_i,:].clone() 
+                    object_default_state[:3] += scene.env_origins[env_i]
+                    
+                    scene['container_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
+                                                                            scene['container_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
+                                                                            scene['container_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
+                    scene['container_collection'].reset()
+                    scene['container_collection'].update(sim_dt)
+
+        # pick
         pick_workarea_1_movement[:, 0] -= sim_dt * item_veloctiy
 
         pancakes_xy_pos = scene['pancake_collection'].data.object_com_pos_w[:,:,:2]
@@ -256,49 +312,16 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                     pick_workarea_1_movement[env_i] = distance
                     
                     object_default_state[:3] += scene.env_origins[env_i]
-                    scene['pancake_collection'].reset()
+                    
                     scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
                                                                             scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             scene['pancake_collection']._ALL_OBJ_INDICES[random_index].unsqueeze(0))
+                    scene['pancake_collection'].reset()
                     scene['pancake_collection'].update(sim_dt)
                 else:
                     print(f"env_{env_i},没有满足条件的点。")
 
 
-
-
- 
-            
-        # cycle
-        container_delta_count = count - container_offset_count
-        
-        if (outfeedVelocity * deltaT * container_delta_count >= outfeed_gen_dist * container_index) and (outfeedVelocity * deltaT * (container_delta_count-1) < outfeed_gen_dist * container_index):
-
-            deltaX_container = outfeedVelocity * deltaT * container_delta_count - outfeed_gen_dist * container_index  # need to suppliment the distance during increasing the time step
-            print(f"[INFO]: Spawn container when {deltaT * container_delta_count}..and {deltaX_container =}.")
- 
-            if container_index >= total_containers:
-                container_index = 0 
-                container_offset_count = count
-                print("----------------------------------------")
-                print("[INFO]: Resetting containers state...")
-                # scene['pancake_collection'].reset()
-                # scene['outfeed_conveyor'].reset()
-            
-
-            container_initial_status = [
-                    -3.5 + deltaX_container, outfeed_y_offset, 0.8-0.001 , 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-                ]
-            container_initial_status_tensor = torch.zeros(len(scene['container_collection']._ALL_ENV_INDICES), 13, device=device)
-            container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
-            container_initial_status_tensor[:,:3] += scene.env_origins
-
-
-            scene['container_collection'].reset()
-            scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index  ].unsqueeze(0))
-            
-            print("----------------------------------------")
-            container_index +=1
 
 
 
@@ -323,13 +346,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             pancakes_initial_status = torch.zeros(batch, 13, device=device)
             pancakes_initial_status[:, 0] = -3.5 + deltaX  # 广播机制
             pancakes_initial_status[:, 1] = torch.tensor(potential_y) + infeed_y_offset  # 直接加法
-            pancakes_initial_status[:, 2] = 0.9 - 0.001  # 广播机制
+            pancakes_initial_status[:, 2] = 0.9 +0.005  # 广播机制
             pancakes_initial_status[:, 3] = 1.0  # 广播机制
 
             # 利用广播机制将 scene.env_origins 扩展到 [2, batch, 3]
             expanded_env_origins = scene.env_origins[:, None, :]  # 形状变为 [2, 1, 3]
             # 创建一个 [2, batch, 13] 的张量，前 3 列是 expanded_env_origins，其余为 0
-            final_env_origins = torch.zeros(len(scene['container_collection']._ALL_ENV_INDICES), batch, 13, device=device)
+            final_env_origins = torch.zeros(scene.num_envs, batch, 13, device=device)
             final_env_origins[:, :, :3] = expanded_env_origins  # 广播机制会自动扩展
             pancakes_initial_status_tensor =  final_env_origins + pancakes_initial_status
 
@@ -337,20 +360,58 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             object_end_index = i + batch if i + batch <= total_pancakes - 1 else total_pancakes 
  
 
-            # scene['pancake_collection'].reset()
+            
             scene['pancake_collection'].write_object_com_state_to_sim(pancakes_initial_status_tensor[:,object_start_index - i:object_end_index - i,:],None,scene['pancake_collection']._ALL_OBJ_INDICES[object_start_index:object_end_index] ) 
+            scene['pancake_collection'].reset()
+            scene['pancake_collection'].update(sim_dt)
             print("----------------------------------------")
             i += batch
 
  
 
+ 
+            
+        # cycle
+        container_delta_count = count - container_offset_count
+        
+        if (outfeedVelocity * deltaT * container_delta_count >= outfeed_gen_dist * container_index) and (outfeedVelocity * deltaT * (container_delta_count-1) < outfeed_gen_dist * container_index):
 
+            deltaX_container = outfeedVelocity * deltaT * container_delta_count - outfeed_gen_dist * container_index  # need to suppliment the distance during increasing the time step
+            print(f"[INFO]: Spawn container when {deltaT * container_delta_count}..and {deltaX_container =}.")
+ 
+            if container_index >= total_containers:
+                container_index = 0 
+                container_offset_count = count
+                print("----------------------------------------")
+                print("[INFO]: Resetting containers state...")
+ 
+                # scene['pancake_collection'].reset()
+                # scene['outfeed_conveyor'].reset()
+            
+
+            container_initial_status = [
+                    -3.5 + deltaX_container, outfeed_y_offset, 0.8 - 0.001  , 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                ]
+            container_initial_status_tensor = torch.zeros(scene.num_envs, 13, device=device)
+            container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
+            container_initial_status_tensor[:,:3] += scene.env_origins
+
+
+            
+            scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,scene['container_collection']._ALL_OBJ_INDICES[container_index  ].unsqueeze(0))
+            scene['container_collection'].reset()
+            scene['container_collection'].update(sim_dt)
+            print("----------------------------------------")
+            container_index +=1
+
+ 
         # perform step
         sim.step()
         # update sim-time
         sim_time += sim_dt
         count += 1
         # update buffers
+        scene.reset()
         scene.update(sim_dt)
  
 
