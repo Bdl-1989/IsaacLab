@@ -67,6 +67,11 @@ item_veloctiy = 10 # m/s
 num_containers = math.ceil(4 / (outfeed_gen_dist)) 
 num_pancake_row = math.ceil(4/(infeed_gen_dist))
 
+pick_height = 0.020 
+place_height = 0.020  + 0.1
+
+
+
 device = "cuda:0"
 
 
@@ -248,8 +253,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # Simulate physics
     while simulation_app.is_running():
         # reset
-
- 
         pick_reset_area = (scene['pancake_collection'].data.object_com_pos_w[:, :, 0] -  scene.env_origins[:, None, 0])> 0 
         if pick_reset_area.any(): 
             for env_i in range(scene.num_envs):
@@ -263,8 +266,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                                                                             scene['pancake_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
                     scene['pancake_collection'].reset()
                     scene['pancake_collection'].update(sim_dt)
-
- 
         container_reset_area = (scene['container_collection'].data.object_com_pos_w[:, :, 0]-  scene.env_origins[:, None, 0] )   > 0
         if container_reset_area.any(): 
             for env_i in range(scene.num_envs):
@@ -288,19 +289,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         pick_workarea_1 = (pancakes_xy_pos[:, :, 0] > -3) & (pancakes_xy_pos[:, :, 0] < -2) & \
                         (pancakes_xy_pos[:, :, 1] > -1) & (pancakes_xy_pos[:, :, 1] < 0) # 判断 x 坐标是否在 (-2, -1) 范围内，且 y 坐标在 (-1, 1) 范围内
         if pick_workarea_1.any(): 
-
             # 遍历第一个维度（0 和 1）
             for env_i in range(scene.num_envs):
-
-
                 if pick_workarea_1_movement[env_i] > 0:
                     continue
                 # 获取当前维度的 True 索引
                 true_indices = torch.nonzero(pick_workarea_1[env_i])[:, 0]  # 取当前维度的索引
-
                 if len(true_indices) > 0:
                     # 随机选择一个满足条件的索引
-                    
                     random_index = true_indices[torch.randint(0, len(true_indices), (1,))].item()
                     print(f"env_{env_i},随机选择的索引:", random_index)
                     object_default_state = scene['pancake_collection'].data.default_object_state[env_i,random_index,:].clone()
@@ -310,9 +306,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
                     print(distance)  # 输出: tensor(9.)
                     pick_workarea_1_movement[env_i] = distance
-                    
                     object_default_state[:3] += scene.env_origins[env_i]
-                    
                     scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
                                                                             scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             scene['pancake_collection']._ALL_OBJ_INDICES[random_index].unsqueeze(0))
@@ -321,7 +315,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 else:
                     print(f"env_{env_i},没有满足条件的点。")
 
-
+        # place
 
 
 
