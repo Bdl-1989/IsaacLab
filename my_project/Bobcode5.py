@@ -149,18 +149,29 @@ OUTFEED_CONVEYOR_CFG = RigidObjectCfg(
 )
 
 PLACE_WORKAREA_1= RigidObjectCfg(
-    spawn=sim_utils.CuboidCfg(size=[0.5, 0.2, 0.2],
+    spawn=sim_utils.CuboidCfg(size=[0.5, 0.2, 0.002],
                               collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
                               mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-                              visual_material=sim_utils.GlassMdlCfg(glass_color=(1.0, 0.0, 1.0),thin_walled=True),
+                              visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 1.0), metallic=0.2,opacity=1),
                               rigid_props=sim_utils.RigidBodyPropertiesCfg(
                                   kinematic_enabled=True,
                               ),
                               ),
-    init_state=RigidObjectCfg.InitialStateCfg(pos=(-2.75, outfeed_y_offset, 0.7)),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(-2.75, outfeed_y_offset, 0.8)),
     debug_vis = True
 )
-
+PICK_WORKAREA_1= RigidObjectCfg(
+    spawn=sim_utils.CuboidCfg(size=[0.5, 1, 0.002],
+                              collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
+                              mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                              visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 1.0), metallic=0.2,opacity=1),
+                              rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                                  kinematic_enabled=True,
+                              ),
+                              ),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(-2.75, infeed_y_offset, 0.9)),
+    debug_vis = True
+)
  
 def spawn_object(i):
     pancake_cfg_dict = {}
@@ -225,6 +236,7 @@ class PancakeSceneCfg(InteractiveSceneCfg):
     outfeed_conveyor: RigidObjectCfg = OUTFEED_CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/outfeed_conveyor")
 
     place_work_area_1: RigidObjectCfg = PLACE_WORKAREA_1.replace(prim_path="{ENV_REGEX_NS}/place_work_area_1")
+    pick_work_area_1: RigidObjectCfg = PICK_WORKAREA_1.replace(prim_path="{ENV_REGEX_NS}/pick_work_area_1")
 
     pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
     container_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic) 
