@@ -191,31 +191,181 @@ total_pancakes = len(combined_dic.keys())
 container_dic = spawn_container(num_containers)
 total_containers = len(container_dic.keys())
 
+import omni.usd
 
-@configclass
-class PancakeSceneCfg(InteractiveSceneCfg):
-    """Configuration for a cart-pole scene."""
+def move_conveyor(i):
+    stage = omni.usd.get_context().get_stage()
+    infeed_conveyor_prim = stage.GetPrimAtPath(f"/World/envs/env_{i}/infeed_conveyor")
+    if infeed_conveyor_prim.IsValid():
+        velocity_attr = infeed_conveyor_prim.GetAttribute("physics:velocity")
+        velocity_attr.Set((infeedVelocity,0,0)) #meters per second
+        print("Velocity set!")
+    else:
+        print("Infeed conveyor or infeed conveyor velocity not found!")
+    outfeed_conveyor_prim = stage.GetPrimAtPath(f"/World/envs/env_{i}/outfeed_conveyor")
+    if outfeed_conveyor_prim.IsValid():
+        velocity_attr = outfeed_conveyor_prim.GetAttribute("physics:velocity")
+        velocity_attr.Set((outfeedVelocity,0,0)) #meters per second
+        print("Velocity set!")
+    else:
+        print("Outfeed conveyor or outfeed conveyor velocity not found!")
 
+# @configclass
+# class PickAndPlaceEnvCfg(DirectMARLEnvCfg):
+#     # env
+#     decimation = 1
+#     episode_length_s = 5.0
+#     possible_agents = ["actor"]
+#     action_spaces = {"actor": 1}
+#     observation_spaces = {"actor": 4}
+#     state_space = -1  #?
 
-    # ground plane
-    ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg(
-        physics_material = sim_utils.RigidBodyMaterialCfg(static_friction=1, dynamic_friction=1,restitution= 1)
-    ))
+#     # simulation
+#     sim: SimulationCfg = SimulationCfg(dt=deltaT, device=device, render_interval=decimation)
 
-    # lights
-    dome_light = AssetBaseCfg(
-        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
-    )
+#     # robot
+#     # robot_cfg: ArticulationCfg = CART_DOUBLE_PENDULUM_CFG.replace(prim_path="/World/envs/env_.*/Robot")
  
 
-    infeed_conveyor: RigidObjectCfg = INFEED_CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/infeed_conveyor")
-    outfeed_conveyor: RigidObjectCfg = OUTFEED_CONVEYOR_CFG.replace(prim_path="{ENV_REGEX_NS}/outfeed_conveyor")
+#     # scene
+#     scene: InteractiveSceneCfg = PancakeSceneCfg(num_envs=2, env_spacing=10, replicate_physics=True)
 
-    place_work_area_1: RigidObjectCfg = PLACE_WORKAREA_1.replace(prim_path="{ENV_REGEX_NS}/place_work_area_1")
-    pick_work_area_1: RigidObjectCfg = PICK_WORKAREA_1.replace(prim_path="{ENV_REGEX_NS}/pick_work_area_1")
+#     # reset
+#     # max_cart_pos = 3.0  # the cart is reset if it exceeds that position [m]
+#     # initial_pole_angle_range = [-0.25, 0.25]  # the range in which the pole angle is sampled from on reset [rad]
+#     # initial_pendulum_angle_range = [-0.25, 0.25]  # the range in which the pendulum angle is sampled from on reset [rad]
 
-    pancake_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
-    container_collection: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic) 
+#     # action scales
+#     # cart_action_scale = 100.0  # [N]
+#     # pendulum_action_scale = 50.0  # [Nm]
+
+#     # reward scales
+#     # rew_scale_alive = 1.0
+#     # rew_scale_terminated = -2.0
+#     # rew_scale_cart_pos = 0
+#     # rew_scale_cart_vel = -0.01
+#     # rew_scale_pole_pos = -1.0
+#     # rew_scale_pole_vel = -0.01
+#     # rew_scale_pendulum_pos = -1.0
+#     # rew_scale_pendulum_vel = -0.01
+
+
+# class PickAndPlaceEnv(DirectMARLEnv):
+#     cfg: PickAndPlaceEnvCfg
+
+#     def __init__(self, cfg: PickAndPlaceEnvCfg, render_mode: str | None = None, **kwargs):
+#         super().__init__(cfg, render_mode, **kwargs)
+#         pass
+#         # self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
+#         # self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
+#         # self._pendulum_dof_idx, _ = self.robot.find_joints(self.cfg.pendulum_dof_name)
+
+#         # self.joint_pos = self.robot.data.joint_pos
+#         # self.joint_vel = self.robot.data.joint_vel
+
+#     def _setup_scene(self):
+ 
+#         # clone and replicate
+#         self.scene.clone_environments(copy_from_source=False)
+ 
+#         # add lights
+ 
+
+#     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
+#         self.actions = actions
+
+#     def _apply_action(self) -> None:
+#         # self.robot.set_joint_effort_target(
+#         #     self.actions["cart"] * self.cfg.cart_action_scale, joint_ids=self._cart_dof_idx
+#         # )
+#         # self.robot.set_joint_effort_target(
+#         #     self.actions["pendulum"] * self.cfg.pendulum_action_scale, joint_ids=self._pendulum_dof_idx
+#         # )
+#         pass
+
+#     def _get_observations(self) -> dict[str, torch.Tensor]:
+#         # pole_joint_pos = normalize_angle(self.joint_pos[:, self._pole_dof_idx[0]].unsqueeze(dim=1))
+#         # pendulum_joint_pos = normalize_angle(self.joint_pos[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1))
+#         observations = {
+#             # "cart": torch.cat(
+#             #     (
+#             #         self.joint_pos[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
+#             #         self.joint_vel[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
+#             #         pole_joint_pos,
+#             #         self.joint_vel[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
+#             #     ),
+#             #     dim=-1,
+#             # ),
+#             # "pendulum": torch.cat(
+#             #     (
+#             #         pole_joint_pos + pendulum_joint_pos,
+#             #         pendulum_joint_pos,
+#             #         self.joint_vel[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1),
+#             #     ),
+#             #     dim=-1,
+#             # ),
+#         }
+#         return observations
+
+#     def _get_rewards(self) -> dict[str, torch.Tensor]:
+#         total_reward = compute_rewards(
+#         )
+#         return total_reward
+
+#     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+ 
+#         time_out = self.episode_length_buf >= self.max_episode_length - 1
+#         # out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos, dim=1)
+#         # out_of_bounds = out_of_bounds | torch.any(torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1)
+
+#         terminated = {agent: torch.Tensor() for agent in self.cfg.possible_agents}
+#         time_outs = {agent: time_out for agent in self.cfg.possible_agents}
+#         return terminated, time_outs
+
+#     def _reset_idx(self, env_ids: Sequence[int] | None):
+#         if env_ids is None:
+#             env_ids = self.scene.num_envs
+#         super()._reset_idx(env_ids)
+#         pass
+#         # joint_pos = self.robot.data.default_joint_pos[env_ids]
+#         # joint_pos[:, self._pole_dof_idx] += sample_uniform(
+#         #     self.cfg.initial_pole_angle_range[0] * math.pi,
+#         #     self.cfg.initial_pole_angle_range[1] * math.pi,
+#         #     joint_pos[:, self._pole_dof_idx].shape,
+#         #     joint_pos.device,
+#         # )
+#         # joint_pos[:, self._pendulum_dof_idx] += sample_uniform(
+#         #     self.cfg.initial_pendulum_angle_range[0] * math.pi,
+#         #     self.cfg.initial_pendulum_angle_range[1] * math.pi,
+#         #     joint_pos[:, self._pendulum_dof_idx].shape,
+#         #     joint_pos.device,
+#         # )
+#         # joint_vel = self.robot.data.default_joint_vel[env_ids]
+
+#         # default_root_state = self.robot.data.default_root_state[env_ids]
+#         # default_root_state[:, :3] += self.scene.env_origins[env_ids]
+
+#         # self.joint_pos[env_ids] = joint_pos
+#         # self.joint_vel[env_ids] = joint_vel
+
+#         # self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
+#         # self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
+#         # self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+
+
+# @torch.jit.script
+# def normalize_angle(angle):
+#     return (angle + math.pi) % (2 * math.pi) - math.pi
+
+
+# @torch.jit.script
+# def compute_rewards():
+ 
+#     total_reward = {
+#         "actor":0 
+#     }
+#     return total_reward
+
 
 
 @configclass
@@ -223,39 +373,48 @@ class PickAndPlaceEnvCfg(DirectMARLEnvCfg):
     # env
     decimation = 1
     episode_length_s = 5.0
-    possible_agents = ["actor"]
-    action_spaces = {"actor": 1}
-    observation_spaces = {"actor": 4}
-    state_space = -1  #?
+    possible_agents = ["cart", "pendulum"]
+    action_spaces = {"cart": 1, "pendulum": 1}
+    observation_spaces = {"cart": 4, "pendulum": 3}
+    state_space = -1
 
     # simulation
-    sim: SimulationCfg = SimulationCfg(dt=deltaT, device=device, render_interval=decimation)
+    sim: SimulationCfg = SimulationCfg(dt=deltaT, render_interval=decimation)
 
     # robot
-    # robot_cfg: ArticulationCfg = CART_DOUBLE_PENDULUM_CFG.replace(prim_path="/World/envs/env_.*/Robot")
- 
+    robot_cfg: ArticulationCfg = CART_DOUBLE_PENDULUM_CFG.replace(prim_path="/World/envs/env_.*/Robot")
+    cart_dof_name = "slider_to_cart"
+    pole_dof_name = "cart_to_pole"
+    pendulum_dof_name = "pole_to_pendulum"
+
+    infeed_conveyor_cfg: RigidObjectCfg = INFEED_CONVEYOR_CFG.replace(prim_path="/World/envs/env_.*/infeed_conveyor")
+    outfeed_conveyor_cfg: RigidObjectCfg = OUTFEED_CONVEYOR_CFG.replace(prim_path="/World/envs/env_.*/outfeed_conveyor")
+    place_work_area_1_cfg: RigidObjectCfg = PLACE_WORKAREA_1.replace(prim_path="/World/envs/env_.*/place_work_area_1")
+    pick_work_area_1_cfg: RigidObjectCfg = PICK_WORKAREA_1.replace(prim_path="/World/envs/env_.*/pick_work_area_1")
+    pancake_collection_cfg: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=combined_dic)
+    container_collection_cfg: RigidObjectCollectionCfg = RigidObjectCollectionCfg(rigid_objects=container_dic) 
 
     # scene
-    scene: InteractiveSceneCfg = PancakeSceneCfg(num_envs=2, env_spacing=10, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=2, env_spacing=10.0, replicate_physics=True)
 
     # reset
-    # max_cart_pos = 3.0  # the cart is reset if it exceeds that position [m]
-    # initial_pole_angle_range = [-0.25, 0.25]  # the range in which the pole angle is sampled from on reset [rad]
-    # initial_pendulum_angle_range = [-0.25, 0.25]  # the range in which the pendulum angle is sampled from on reset [rad]
+    max_cart_pos = 3.0  # the cart is reset if it exceeds that position [m]
+    initial_pole_angle_range = [-0.25, 0.25]  # the range in which the pole angle is sampled from on reset [rad]
+    initial_pendulum_angle_range = [-0.25, 0.25]  # the range in which the pendulum angle is sampled from on reset [rad]
 
     # action scales
-    # cart_action_scale = 100.0  # [N]
-    # pendulum_action_scale = 50.0  # [Nm]
+    cart_action_scale = 100.0  # [N]
+    pendulum_action_scale = 50.0  # [Nm]
 
     # reward scales
-    # rew_scale_alive = 1.0
-    # rew_scale_terminated = -2.0
-    # rew_scale_cart_pos = 0
-    # rew_scale_cart_vel = -0.01
-    # rew_scale_pole_pos = -1.0
-    # rew_scale_pole_vel = -0.01
-    # rew_scale_pendulum_pos = -1.0
-    # rew_scale_pendulum_vel = -0.01
+    rew_scale_alive = 1.0
+    rew_scale_terminated = -2.0
+    rew_scale_cart_pos = 0
+    rew_scale_cart_vel = -0.01
+    rew_scale_pole_pos = -1.0
+    rew_scale_pole_vel = -0.01
+    rew_scale_pendulum_pos = -1.0
+    rew_scale_pendulum_vel = -0.01
 
 
 class PickAndPlaceEnv(DirectMARLEnv):
@@ -263,102 +422,140 @@ class PickAndPlaceEnv(DirectMARLEnv):
 
     def __init__(self, cfg: PickAndPlaceEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
-        pass
-        # self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
-        # self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
-        # self._pendulum_dof_idx, _ = self.robot.find_joints(self.cfg.pendulum_dof_name)
 
-        # self.joint_pos = self.robot.data.joint_pos
-        # self.joint_vel = self.robot.data.joint_vel
+        self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
+        self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
+        self._pendulum_dof_idx, _ = self.robot.find_joints(self.cfg.pendulum_dof_name)
+
+        self.joint_pos = self.robot.data.joint_pos
+        self.joint_vel = self.robot.data.joint_vel
 
     def _setup_scene(self):
- 
+        self.robot = Articulation(self.cfg.robot_cfg)
+        # add ground plane
+        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
- 
+        # add articulation to scene
+        self.scene.articulations["robot"] = self.robot
         # add lights
- 
+        light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
+        light_cfg.func("/World/Light", light_cfg)
+        # add rigidbody
+        self.infeed_conveyor = RigidObject(self.cfg.infeed_conveyor_cfg)
+        self.outfeed_conveyor = RigidObject(self.cfg.outfeed_conveyor_cfg)
+        self.place_work_area_1 = RigidObject(self.cfg.place_work_area_1_cfg)
+        self.pick_work_area_1 = RigidObject(self.cfg.pick_work_area_1_cfg)
+        self.pancake_collection = RigidObjectCollection(self.cfg.pancake_collection_cfg)
+        self.container_collection = RigidObjectCollection(self.cfg.container_collection_cfg)
+        # add rigid to scene
+        self.scene.rigid_objects["infeed_conveyor"] = self.infeed_conveyor
+        self.scene.rigid_objects["outfeed_conveyor"] = self.outfeed_conveyor
+        self.scene.rigid_objects["place_work_area_1"] = self.place_work_area_1
+        self.scene.rigid_objects["pick_work_area_1"] = self.pick_work_area_1
+        self.scene.rigid_object_collections["pancake_collection"] = self.pancake_collection
+        self.scene.rigid_object_collections["container_collection"] = self.container_collection
+
+        for i in range(self.scene.num_envs):
+            move_conveyor(i)
+        
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
         self.actions = actions
 
     def _apply_action(self) -> None:
-        # self.robot.set_joint_effort_target(
-        #     self.actions["cart"] * self.cfg.cart_action_scale, joint_ids=self._cart_dof_idx
-        # )
-        # self.robot.set_joint_effort_target(
-        #     self.actions["pendulum"] * self.cfg.pendulum_action_scale, joint_ids=self._pendulum_dof_idx
-        # )
-        pass
+        self.robot.set_joint_effort_target(
+            self.actions["cart"] * self.cfg.cart_action_scale, joint_ids=self._cart_dof_idx
+        )
+        self.robot.set_joint_effort_target(
+            self.actions["pendulum"] * self.cfg.pendulum_action_scale, joint_ids=self._pendulum_dof_idx
+        )
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
-        # pole_joint_pos = normalize_angle(self.joint_pos[:, self._pole_dof_idx[0]].unsqueeze(dim=1))
-        # pendulum_joint_pos = normalize_angle(self.joint_pos[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1))
+        pole_joint_pos = normalize_angle(self.joint_pos[:, self._pole_dof_idx[0]].unsqueeze(dim=1))
+        pendulum_joint_pos = normalize_angle(self.joint_pos[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1))
         observations = {
-            # "cart": torch.cat(
-            #     (
-            #         self.joint_pos[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
-            #         self.joint_vel[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
-            #         pole_joint_pos,
-            #         self.joint_vel[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
-            #     ),
-            #     dim=-1,
-            # ),
-            # "pendulum": torch.cat(
-            #     (
-            #         pole_joint_pos + pendulum_joint_pos,
-            #         pendulum_joint_pos,
-            #         self.joint_vel[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1),
-            #     ),
-            #     dim=-1,
-            # ),
+            "cart": torch.cat(
+                (
+                    self.joint_pos[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
+                    self.joint_vel[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
+                    pole_joint_pos,
+                    self.joint_vel[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
+                ),
+                dim=-1,
+            ),
+            "pendulum": torch.cat(
+                (
+                    pole_joint_pos + pendulum_joint_pos,
+                    pendulum_joint_pos,
+                    self.joint_vel[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1),
+                ),
+                dim=-1,
+            ),
         }
         return observations
 
     def _get_rewards(self) -> dict[str, torch.Tensor]:
         total_reward = compute_rewards(
+            self.cfg.rew_scale_alive,
+            self.cfg.rew_scale_terminated,
+            self.cfg.rew_scale_cart_pos,
+            self.cfg.rew_scale_cart_vel,
+            self.cfg.rew_scale_pole_pos,
+            self.cfg.rew_scale_pole_vel,
+            self.cfg.rew_scale_pendulum_pos,
+            self.cfg.rew_scale_pendulum_vel,
+            self.joint_pos[:, self._cart_dof_idx[0]],
+            self.joint_vel[:, self._cart_dof_idx[0]],
+            normalize_angle(self.joint_pos[:, self._pole_dof_idx[0]]),
+            self.joint_vel[:, self._pole_dof_idx[0]],
+            normalize_angle(self.joint_pos[:, self._pendulum_dof_idx[0]]),
+            self.joint_vel[:, self._pendulum_dof_idx[0]],
+            math.prod(self.terminated_dict.values()),
         )
         return total_reward
 
     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
- 
-        time_out = self.episode_length_buf >= self.max_episode_length - 1
-        # out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos, dim=1)
-        # out_of_bounds = out_of_bounds | torch.any(torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1)
+        self.joint_pos = self.robot.data.joint_pos
+        self.joint_vel = self.robot.data.joint_vel
 
-        terminated = {agent: torch.Tensor() for agent in self.cfg.possible_agents}
+        time_out = self.episode_length_buf >= self.max_episode_length - 1
+        out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos, dim=1)
+        out_of_bounds = out_of_bounds | torch.any(torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1)
+
+        terminated = {agent: out_of_bounds for agent in self.cfg.possible_agents}
         time_outs = {agent: time_out for agent in self.cfg.possible_agents}
         return terminated, time_outs
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
-            env_ids = self.scene.num_envs
+            env_ids = self.robot._ALL_INDICES
         super()._reset_idx(env_ids)
-        pass
-        # joint_pos = self.robot.data.default_joint_pos[env_ids]
-        # joint_pos[:, self._pole_dof_idx] += sample_uniform(
-        #     self.cfg.initial_pole_angle_range[0] * math.pi,
-        #     self.cfg.initial_pole_angle_range[1] * math.pi,
-        #     joint_pos[:, self._pole_dof_idx].shape,
-        #     joint_pos.device,
-        # )
-        # joint_pos[:, self._pendulum_dof_idx] += sample_uniform(
-        #     self.cfg.initial_pendulum_angle_range[0] * math.pi,
-        #     self.cfg.initial_pendulum_angle_range[1] * math.pi,
-        #     joint_pos[:, self._pendulum_dof_idx].shape,
-        #     joint_pos.device,
-        # )
-        # joint_vel = self.robot.data.default_joint_vel[env_ids]
 
-        # default_root_state = self.robot.data.default_root_state[env_ids]
-        # default_root_state[:, :3] += self.scene.env_origins[env_ids]
+        joint_pos = self.robot.data.default_joint_pos[env_ids]
+        joint_pos[:, self._pole_dof_idx] += sample_uniform(
+            self.cfg.initial_pole_angle_range[0] * math.pi,
+            self.cfg.initial_pole_angle_range[1] * math.pi,
+            joint_pos[:, self._pole_dof_idx].shape,
+            joint_pos.device,
+        )
+        joint_pos[:, self._pendulum_dof_idx] += sample_uniform(
+            self.cfg.initial_pendulum_angle_range[0] * math.pi,
+            self.cfg.initial_pendulum_angle_range[1] * math.pi,
+            joint_pos[:, self._pendulum_dof_idx].shape,
+            joint_pos.device,
+        )
+        joint_vel = self.robot.data.default_joint_vel[env_ids]
 
-        # self.joint_pos[env_ids] = joint_pos
-        # self.joint_vel[env_ids] = joint_vel
+        default_root_state = self.robot.data.default_root_state[env_ids]
+        default_root_state[:, :3] += self.scene.env_origins[env_ids]
 
-        # self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
-        # self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
-        # self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+        self.joint_pos[env_ids] = joint_pos
+        self.joint_vel[env_ids] = joint_vel
+
+        self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
+        self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
+        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
 
 @torch.jit.script
@@ -367,9 +564,35 @@ def normalize_angle(angle):
 
 
 @torch.jit.script
-def compute_rewards():
- 
+def compute_rewards(
+    rew_scale_alive: float,
+    rew_scale_terminated: float,
+    rew_scale_cart_pos: float,
+    rew_scale_cart_vel: float,
+    rew_scale_pole_pos: float,
+    rew_scale_pole_vel: float,
+    rew_scale_pendulum_pos: float,
+    rew_scale_pendulum_vel: float,
+    cart_pos: torch.Tensor,
+    cart_vel: torch.Tensor,
+    pole_pos: torch.Tensor,
+    pole_vel: torch.Tensor,
+    pendulum_pos: torch.Tensor,
+    pendulum_vel: torch.Tensor,
+    reset_terminated: torch.Tensor,
+):
+    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
+    rew_termination = rew_scale_terminated * reset_terminated.float()
+    rew_pole_pos = rew_scale_pole_pos * torch.sum(torch.square(pole_pos).unsqueeze(dim=1), dim=-1)
+    rew_pendulum_pos = rew_scale_pendulum_pos * torch.sum(
+        torch.square(pole_pos + pendulum_pos).unsqueeze(dim=1), dim=-1
+    )
+    rew_cart_vel = rew_scale_cart_vel * torch.sum(torch.abs(cart_vel).unsqueeze(dim=1), dim=-1)
+    rew_pole_vel = rew_scale_pole_vel * torch.sum(torch.abs(pole_vel).unsqueeze(dim=1), dim=-1)
+    rew_pendulum_vel = rew_scale_pendulum_vel * torch.sum(torch.abs(pendulum_vel).unsqueeze(dim=1), dim=-1)
+
     total_reward = {
-        "actor":0 
+        "cart": rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel,
+        "pendulum": rew_alive + rew_termination + rew_pendulum_pos + rew_pendulum_vel,
     }
     return total_reward
