@@ -266,9 +266,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
 
     # move_conveyor()
-    # for i in range(scene.num_envs):
-    #     move_conveyor(i)
- 
+    for i in range(scene.num_envs):
+        move_conveyor(i)
+
+    container_names = scene['container_collection'].object_names
+    # pancakes_per_container_dict = {name: 0 for name in container_names} 
+    pancakes_per_container_dict= torch.zeros(scene.num_envs, scene['container_collection'].num_objects)
 
     sim_dt = sim.get_physics_dt()
     sim_time = 0.0
@@ -289,7 +292,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 for true_i in true_indices:
                     object_default_state = scene['pancake_collection'].data.default_object_state[env_i,true_i,:].clone() 
                     object_default_state[:3] += scene.env_origins[env_i]
-                    
+
+
+
                     scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
                                                                             scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             scene['pancake_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
@@ -302,7 +307,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 for true_i in true_indices:
                     object_default_state = scene['container_collection'].data.default_object_state[env_i,true_i,:].clone() 
                     object_default_state[:3] += scene.env_origins[env_i]
-                    
+                    pancakes_per_container_dict[env_i,true_i] = 0
                     scene['container_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
                                                                             scene['container_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             scene['container_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
@@ -347,11 +352,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                             pick_workarea_1_movement[env_i] = distance
 
                             pancake_object_state = scene['pancake_collection'].data.default_object_state[env_i,pancake_random_index,:].clone()
-
+                            pancakes_per_container_dict[env_i, int(container_random_index)] += 1
                             pancake_object_state[:3] = container_object_state
-                            pancake_object_state[2] += 0.01
+                            pancake_object_state[2] += pancakes_per_container_dict[env_i, int(container_random_index)] * 0.01 - 0.005
                             pancake_object_state[:3] += scene.env_origins[env_i]
-                            pancake_object_state[7] += outfeedVelocity
+                            pancake_object_state[7] = outfeedVelocity
+
+
+
                             scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.unsqueeze(0).unsqueeze(0), \
                                                                                     scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                                     scene['pancake_collection']._ALL_OBJ_INDICES[pancake_random_index].unsqueeze(0))
