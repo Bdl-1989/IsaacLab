@@ -122,8 +122,7 @@ container_cfg =  RigidObjectCfg(
         init_state=RigidObjectCfg.InitialStateCfg(),
     )
 
-
-pancake_cfg_dict = {}
+ 
 
 INFEED_CONVEYOR_CFG = RigidObjectCfg(
     spawn=sim_utils.CuboidCfg(size=[4.0, 1, 0.9],
