@@ -224,7 +224,7 @@ def move_conveyor(i):
  
 
 pick_place_time_consumption = 0.8 # s, commented by Micheal, 3/13/2025
-deltaT = pick_place_time_consumption
+deltaT = pick_place_time_consumption / 10
 
 @configclass
 class PickAndPlaceEnvCfg(DirectMARLEnvCfg):
