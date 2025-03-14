@@ -284,7 +284,6 @@ class PickAndPlaceEnv(DirectMARLEnv):
     def __init__(self, cfg: PickAndPlaceEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-
         self.count = 0
         self.i = 0
         self.container_index = 0
@@ -329,14 +328,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
         self.scene.rigid_object_collections["pancake_collection"] = self.pancake_collection
         self.scene.rigid_object_collections["container_collection"] = self.container_collection
 
-        # for conveyor_index in range(self.scene.num_envs):
-        #     move_conveyor(conveyor_index)
-    
     def _generator_objects(self):
         pancake_delta_count = self.count - self.pancake_offset_count
         if (infeedVelocity * deltaT * pancake_delta_count >= infeed_gen_dist * self.i / self.batch) and (infeedVelocity * deltaT * (pancake_delta_count -1 ) > infeed_gen_dist * self.i /self.batch ):
-
-            
             deltaX = infeedVelocity * deltaT * pancake_delta_count - infeed_gen_dist * self.i / self.batch  # need to suppliment the distance during increasing the time step
             print(f"[INFO]: Spawn pancake when {deltaT * pancake_delta_count}..and {deltaX =}.")
  
@@ -347,51 +341,36 @@ class PickAndPlaceEnv(DirectMARLEnv):
                 print("----------------------------------------")
                 print("[INFO]: Resetting pancakes state...") 
                 # scene['infeed_conveyor'].reset()
-
-
             pancakes_initial_status = torch.zeros(self.batch, 13, device=device)
             pancakes_initial_status[:, 0] = -3.5 + deltaX  # 广播机制
             pancakes_initial_status[:, 1] = torch.tensor(potential_y) + infeed_y_offset  # 直接加法
             pancakes_initial_status[:, 2] = 0.9 +0.005  # 广播机制
             pancakes_initial_status[:, 3] = 1.0  # 广播机制
             pancakes_initial_status[:, 7] = infeedVelocity  # 广播机制
-
-
             # 利用广播机制将 scene.env_origins 扩展到 [2, batch, 3]
             expanded_env_origins = self.scene.env_origins[:, None, :]  # 形状变为 [2, 1, 3]
             # 创建一个 [2, batch, 13] 的张量，前 3 列是 expanded_env_origins，其余为 0
             final_env_origins = torch.zeros(self.scene.num_envs, self.batch, 13, device=device)
             final_env_origins[:, :, :3] = expanded_env_origins  # 广播机制会自动扩展
             pancakes_initial_status_tensor =  final_env_origins + pancakes_initial_status
-
             object_start_index = self.i
             object_end_index = self.i + self.batch if self.i + self.batch <= total_pancakes - 1 else total_pancakes 
- 
-
-            
             self.scene['pancake_collection'].write_object_com_state_to_sim(pancakes_initial_status_tensor[:,object_start_index - self.i:object_end_index - self.i,:],None,self.scene['pancake_collection']._ALL_OBJ_INDICES[object_start_index:object_end_index] ) 
             self.scene['pancake_collection'].reset()
             # self.scene['pancake_collection'].update(sim_dt)
             print("----------------------------------------")
             self.i += self.batch
 
- 
-
-            
         # cycle
         container_delta_count = self.count - self.container_offset_count
-        
         if (outfeedVelocity * deltaT * container_delta_count >= outfeed_gen_dist * self.container_index) and (outfeedVelocity * deltaT * (container_delta_count-1) < outfeed_gen_dist * self.container_index):
-
             deltaX_container = outfeedVelocity * deltaT * container_delta_count - outfeed_gen_dist * self.container_index  # need to suppliment the distance during increasing the time step
             print(f"[INFO]: Spawn container when {deltaT * container_delta_count}..and {deltaX_container =}.")
- 
             if self.container_index >= total_containers:
                 self.container_index = 0 
                 self.container_offset_count = self.count
                 print("----------------------------------------")
                 print("[INFO]: Resetting containers state...")
- 
 
             container_initial_status = [
                     -3.5 + deltaX_container, outfeed_y_offset, 0.8   , 1.0, 0.0, 0.0, 0.0, outfeedVelocity, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -400,8 +379,6 @@ class PickAndPlaceEnv(DirectMARLEnv):
             container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
             container_initial_status_tensor[:,:3] += self.scene.env_origins
 
-
-            
             self.scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,self.scene['container_collection']._ALL_OBJ_INDICES[self.container_index].unsqueeze(0))
             self.scene['container_collection'].reset() 
             print("----------------------------------------")
@@ -417,7 +394,6 @@ class PickAndPlaceEnv(DirectMARLEnv):
                 for true_i in true_indices:
                     object_default_state = self.scene['pancake_collection'].data.default_object_state[env_i,true_i,:].clone() 
                     object_default_state[:3] += self.scene.env_origins[env_i]
-                    
                     self.scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
                                                                             self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             self.scene['pancake_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
@@ -436,7 +412,6 @@ class PickAndPlaceEnv(DirectMARLEnv):
                     self.scene['container_collection'].reset() 
 
     def _pick_and_place(self):
-
         # pick # place
         self.pick_workarea_1_movement[:, 0] -= self.physics_dt 
 
@@ -454,7 +429,6 @@ class PickAndPlaceEnv(DirectMARLEnv):
             if self.pick_workarea_1_movement[env_i, 0].item() <= 0 and self.pick_workarea_1_movement[env_i, 1].item() >= 0:
                 self.pick_workarea_1_movement[env_i, 1] = -1
 
-
             if self.pick_workarea_1_movement[env_i, 0].item() <= 0 and place_workarea_1.any() and self.pick_workarea_1_movement[env_i, 1].item() < 0:
                 # pick a pancake index
                 if pick_workarea_1.any(): 
@@ -462,14 +436,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
                     if len(pancakes_true_indices) > 0:
                         pancake_random_index = pancakes_true_indices[torch.randint(0, len(pancakes_true_indices), (1,))].item()
                         print(f"env_{env_i},随机选择pancake的索引:", pancake_random_index)
-
                         pancake_object_state = self.scene['pancake_collection'].data.object_com_state_w[env_i,pancake_random_index,:].clone()
-                        
- 
                         self.pick_workarea_1_movement[env_i, 0] = pick_place_time_consumption
                         self.pick_workarea_1_movement[env_i, 1] = pancake_random_index
-
-
                         pancake_object_state[2] += 0.01
                         pancake_object_state[7] = 0
                         pancake_object_state[:3] += self.scene.env_origins[env_i]
@@ -477,30 +446,21 @@ class PickAndPlaceEnv(DirectMARLEnv):
                                                                                 self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                                 self.scene['pancake_collection']._ALL_OBJ_INDICES[pancake_random_index].unsqueeze(0))
                         self.scene['pancake_collection'].reset() 
-
- 
                 else:
                     print(f"env_{env_i},没有满足条件的pancake点。")
 
 
             elif abs(self.pick_workarea_1_movement[env_i, 0].item() - pick_place_time_consumption/2.) <= self.physics_dt and self.pick_workarea_1_movement[env_i, 1].item() >= 0:
                 # find a container to place
-                
                 hold_index = int(self.pick_workarea_1_movement[env_i, 1].item())
                 if place_workarea_1.any(): 
                     containers_true_indices = torch.nonzero(place_workarea_1[env_i])[:, 0]  # 取当前维度的索引
                     container_random_index = containers_true_indices[torch.randint(0, len(containers_true_indices), (1,))].item()
                     print(f"env_{env_i},随机选择container的索引:", container_random_index)
                     pancake_object_state = self.scene['container_collection'].data.object_com_state_w[env_i,container_random_index,:].clone()
-                    # pancake_object_state = self.scene['pancake_collection'].data.default_object_state[env_i,self.hold_1_index,:].clone()
-
                     self.pancakes_per_container_dict[env_i, int(container_random_index)] += 1
                     pancake_object_state[2] += self.pancakes_per_container_dict[env_i, int(container_random_index)] * 0.01 - 0.005
                     pancake_object_state[:3] += self.scene.env_origins[env_i]
-                    # pancake_object_state[7] = outfeedVelocity
-
-
-
                     self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.unsqueeze(0).unsqueeze(0), \
                                                                             self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             self.scene['pancake_collection']._ALL_OBJ_INDICES[hold_index].unsqueeze(0))
@@ -511,10 +471,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
                 hold_index = int(self.pick_workarea_1_movement[env_i, 1].item())
                 if self.pick_workarea_1_movement[env_i, 1].item() >= 0:
 
-
                     pancake_object_state = self.scene['pancake_collection'].data.object_com_state_w[env_i,hold_index,:].clone()
-                    
- 
                     pancake_object_state[2] += 0.01
                     pancake_object_state[7] = 0
                     pancake_object_state[:3] += self.scene.env_origins[env_i]
@@ -522,54 +479,6 @@ class PickAndPlaceEnv(DirectMARLEnv):
                                                                             self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
                                                                             self.scene['pancake_collection']._ALL_OBJ_INDICES[hold_index].unsqueeze(0))
                     self.scene['pancake_collection'].reset() 
-
-
-                print(f"env_{env_i},robot is occupied.")
- 
-
-
-
-        # if place_workarea_1.any(): 
-        #     for env_i in range(self.scene.num_envs):
-
-        #         # if self.pick_workarea_1_movement[env_i] > 0:
-        #         #     print(f"env_{env_i},robot is occupied.")
-        #         #     continue
- 
-        #         containers_true_indices = torch.nonzero(place_workarea_1[env_i])[:, 0]  # 取当前维度的索引
-        #         if len(containers_true_indices) > 0:
-        #             container_random_index = containers_true_indices[torch.randint(0, len(containers_true_indices), (1,))].item()
-        #             print(f"env_{env_i},随机选择container的索引:", container_random_index)
-
-        #             container_object_state = self.scene['container_collection'].data.object_com_pos_w[env_i,container_random_index,:].clone()
-
-        #             if pick_workarea_1.any(): 
-        #                 pancakes_true_indices = torch.nonzero(pick_workarea_1[env_i])[:, 0]  # 取当前维度的索引
-        #                 if len(pancakes_true_indices) > 0:
-        #                     pancake_random_index = pancakes_true_indices[torch.randint(0, len(pancakes_true_indices), (1,))].item()
-        #                     print(f"env_{env_i},随机选择pancake的索引:", pancake_random_index)
-
-        #                     pancake_object_state = self.scene['pancake_collection'].data.object_com_pos_w[env_i,pancake_random_index,:].clone()
-                            
-        #                     distance = torch.norm(pancake_object_state[:3] - container_object_state, p=1)
-        #                     self.pick_workarea_1_movement[env_i] = pick_place_time_consumption
-
-        #                     pancake_object_state = self.scene['pancake_collection'].data.default_object_state[env_i,pancake_random_index,:].clone()
-
-        #                     self.pancakes_per_container_dict[env_i, int(container_random_index)] += 1
-
-        #                     pancake_object_state[:3] = container_object_state
-        #                     pancake_object_state[2] += self.pancakes_per_container_dict[env_i, int(container_random_index)] * 0.01 - 0.005
-        #                     pancake_object_state[:3] += self.scene.env_origins[env_i]
-        #                     pancake_object_state[7] = outfeedVelocity
-        #                     self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.unsqueeze(0).unsqueeze(0), \
-        #                                                                             self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
-        #                                                                             self.scene['pancake_collection']._ALL_OBJ_INDICES[pancake_random_index].unsqueeze(0))
-        #                     self.scene['pancake_collection'].reset() 
-        #             else:
-        #                 print(f"env_{env_i},没有满足条件的pancake点。")
-        #         else:
-        #             print(f"env_{env_i},没有满足条件的container点。")
 
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
