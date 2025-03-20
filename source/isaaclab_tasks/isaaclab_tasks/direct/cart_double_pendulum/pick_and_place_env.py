@@ -30,6 +30,10 @@ from isaaclab.assets import (
 )
 
 
+
+
+
+
 infeedVelocity = 0.0467
 outfeedVelocity = 0.1333
 infeed_y_offset = -0.5
@@ -45,7 +49,7 @@ num_pancake_row = math.ceil(4/(infeed_gen_dist))
 pick_height = 0.020 
 place_height = 0.020  + 0.1
 
-device = "cuda:0"
+device = "cuda:1"
 
 
 pancake_cfg =  RigidObjectCfg(
@@ -226,6 +230,13 @@ def move_conveyor(i):
 pick_place_time_consumption = 0.8 # s, commented by Micheal, 3/13/2025
 deltaT = pick_place_time_consumption / 10
 
+# value only from 0 to 1
+# final target, 2 in container, 3 for stacked
+# stack_matrix = torch.zeros(2,3) 
+# test structure, 2 in container, 1 for stacked
+stack_matrix = torch.zeros(2,1) 
+
+
 @configclass
 class PickAndPlaceEnvCfg(DirectMARLEnvCfg):
     # env
@@ -275,7 +286,8 @@ class PickAndPlaceEnvCfg(DirectMARLEnvCfg):
     rew_scale_pendulum_vel = -0.01
 
 
-
+from gym import spaces
+import numpy as np
 
 
 class PickAndPlaceEnv(DirectMARLEnv):
@@ -293,6 +305,41 @@ class PickAndPlaceEnv(DirectMARLEnv):
         self.pick_workarea_1_movement = torch.zeros(self.scene.num_envs, 2)
         self.pick_workarea_1_movement[:,1] -= 1 # for holding pancake index
 
+ 
+        # y
+        # ^
+        # |
+        # |                       
+        # |  +--------------------+  y = 0.2 (place_workarea_1 top)
+        # |  |                    |
+        # |  |  Place Workarea 1  |
+        # |  |                    |
+        # |  +--------------------+  y = 0   (place_workarea_1 bottom / pick_workarea_1 top)
+        # |  |                    |
+        # |  |  Pick Workarea 1   |
+        # |  |                    |
+        # |  +--------------------+  y = -1  (pick_workarea_1 bottom)
+        # |
+        # |-------------------------------> x
+        #     x = -3               x = -2.5
+        self.pick_workarea_1_boundaries = spaces.Box(
+            low=np.array([-3, -1]), 
+            high=np.array([-2.5, 0]), 
+            dtype=np.float32
+        )
+ 
+        self.place_workarea_1_boundaries = spaces.Box(
+            low=np.array([-3, 0]), 
+            high=np.array([-2.5, 0.2]), 
+            dtype=np.float32
+        )
+        self.place_relative_array = spaces.Box(
+            low=0,  # empty
+            high=1,  # place
+            shape=(2, 1),  # shape
+            dtype=np.int32  # discrete
+        )
+
         self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
         self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
         self._pendulum_dof_idx, _ = self.robot.find_joints(self.cfg.pendulum_dof_name)
@@ -302,6 +349,11 @@ class PickAndPlaceEnv(DirectMARLEnv):
 
         self.pancakes_per_container_dict = torch.zeros(self.scene.num_envs, self.scene['container_collection'].num_objects)
 
+
+
+
+
+
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
         # add ground plane
@@ -309,6 +361,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
         # add articulation to scene
+ 
         self.scene.articulations["robot"] = self.robot
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
@@ -379,7 +432,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
             container_initial_status_tensor += torch.tensor(container_initial_status, device=device)
             container_initial_status_tensor[:,:3] += self.scene.env_origins
 
-            self.scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.unsqueeze(1),None,self.scene['container_collection']._ALL_OBJ_INDICES[self.container_index].unsqueeze(0))
+            self.scene['container_collection'].write_object_com_state_to_sim(container_initial_status_tensor.view(self.scene.num_envs,1, -1),None,self.scene['container_collection']._ALL_OBJ_INDICES[self.container_index].view(1))
             self.scene['container_collection'].reset() 
             print("----------------------------------------")
             self.container_index +=1
@@ -394,9 +447,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
                 for true_i in true_indices:
                     object_default_state = self.scene['pancake_collection'].data.default_object_state[env_i,true_i,:].clone() 
                     object_default_state[:3] += self.scene.env_origins[env_i]
-                    self.scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
-                                                                            self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
-                                                                            self.scene['pancake_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
+                    self.scene['pancake_collection'].write_object_com_state_to_sim(object_default_state.view(1,1,-1), \
+                                                                            self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].view(1), \
+                                                                            self.scene['pancake_collection']._ALL_OBJ_INDICES[true_i].view(1))
                     self.scene['pancake_collection'].reset() 
         container_reset_area = (self.scene['container_collection'].data.object_com_pos_w[:, :, 0]-  self.scene.env_origins[:, None, 0] )   > 0
         if container_reset_area.any(): 
@@ -406,9 +459,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
                     object_default_state = self.scene['container_collection'].data.default_object_state[env_i,true_i,:].clone() 
                     object_default_state[:3] += self.scene.env_origins[env_i]
                     self.pancakes_per_container_dict[env_i,true_i] = 0
-                    self.scene['container_collection'].write_object_com_state_to_sim(object_default_state.unsqueeze(0).unsqueeze(0), \
-                                                                            self.scene['container_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
-                                                                            self.scene['container_collection']._ALL_OBJ_INDICES[true_i].unsqueeze(0))
+                    self.scene['container_collection'].write_object_com_state_to_sim(object_default_state.view(1,1,-1), \
+                                                                            self.scene['container_collection']._ALL_ENV_INDICES[env_i].view(1), \
+                                                                            self.scene['container_collection']._ALL_OBJ_INDICES[true_i].view(1))
                     self.scene['container_collection'].reset() 
 
     def _pick_and_place(self):
@@ -420,11 +473,21 @@ class PickAndPlaceEnv(DirectMARLEnv):
         containers_xy_pos = self.scene['container_collection'].data.object_com_pos_w[:,:,:2]
         containers_xy_pos -= self.scene.env_origins[:, None, :2]
         
-        pick_workarea_1 = (pancakes_xy_pos[:, :, 0] > -3) & (pancakes_xy_pos[:, :, 0] < -2.5) & \
-                        (pancakes_xy_pos[:, :, 1] > -1) & (pancakes_xy_pos[:, :, 1] < 0) # 判断 x 坐标是否在 (-2, -1) 范围内，且 y 坐标在 (-1, 1) 范围内
-        place_workarea_1 = (containers_xy_pos[:, :, 0] > -3) & (containers_xy_pos[:, :, 0] < -2.5) & \
-                        (containers_xy_pos[:, :, 1] > 0) & (containers_xy_pos[:, :, 1] < 0.2) # 判断 x 坐标是否在 (-2, -1) 范围内，且 y 坐标在 (-1, 1) 范围内
+        # 使用 self.pick_workarea_1_boundaries 的边界值
+        pick_workarea_1 = (
+            (pancakes_xy_pos[:, :, 0] > self.pick_workarea_1_boundaries.low[0]) & 
+            (pancakes_xy_pos[:, :, 0] < self.pick_workarea_1_boundaries.high[0]) & 
+            (pancakes_xy_pos[:, :, 1] > self.pick_workarea_1_boundaries.low[1]) & 
+            (pancakes_xy_pos[:, :, 1] < self.pick_workarea_1_boundaries.high[1])
+        )
 
+        # 使用 self.place_workarea_1_boundaries 的边界值
+        place_workarea_1 = (
+            (containers_xy_pos[:, :, 0] > self.place_workarea_1_boundaries.low[0]) & 
+            (containers_xy_pos[:, :, 0] < self.place_workarea_1_boundaries.high[0]) & 
+            (containers_xy_pos[:, :, 1] > self.place_workarea_1_boundaries.low[1]) & 
+            (containers_xy_pos[:, :, 1] < self.place_workarea_1_boundaries.high[1])
+        )
         for env_i in range(self.scene.num_envs):
             if self.pick_workarea_1_movement[env_i, 0].item() <= 0 and self.pick_workarea_1_movement[env_i, 1].item() >= 0:
                 self.pick_workarea_1_movement[env_i, 1] = -1
@@ -442,9 +505,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
                         pancake_object_state[2] += 0.01
                         pancake_object_state[7] = 0
                         pancake_object_state[:3] += self.scene.env_origins[env_i]
-                        self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.unsqueeze(0).unsqueeze(0), \
-                                                                                self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
-                                                                                self.scene['pancake_collection']._ALL_OBJ_INDICES[pancake_random_index].unsqueeze(0))
+                        self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.view(1,1,-1), \
+                                                                                self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].view(1), \
+                                                                                self.scene['pancake_collection']._ALL_OBJ_INDICES[pancake_random_index].view(1))
                         self.scene['pancake_collection'].reset() 
                 else:
                     print(f"env_{env_i},没有满足条件的pancake点。")
@@ -461,9 +524,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
                     self.pancakes_per_container_dict[env_i, int(container_random_index)] += 1
                     pancake_object_state[2] += self.pancakes_per_container_dict[env_i, int(container_random_index)] * 0.01 - 0.005
                     pancake_object_state[:3] += self.scene.env_origins[env_i]
-                    self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.unsqueeze(0).unsqueeze(0), \
-                                                                            self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
-                                                                            self.scene['pancake_collection']._ALL_OBJ_INDICES[hold_index].unsqueeze(0))
+                    self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.view(1,1,-1), \
+                                                                            self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].view(1), \
+                                                                            self.scene['pancake_collection']._ALL_OBJ_INDICES[hold_index].view(1))
                     self.scene['pancake_collection'].reset()  
                     self.pick_workarea_1_movement[env_i, 1] = -1
             else:
@@ -475,9 +538,9 @@ class PickAndPlaceEnv(DirectMARLEnv):
                     pancake_object_state[2] += 0.01
                     pancake_object_state[7] = 0
                     pancake_object_state[:3] += self.scene.env_origins[env_i]
-                    self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.unsqueeze(0).unsqueeze(0), \
-                                                                            self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].unsqueeze(0), \
-                                                                            self.scene['pancake_collection']._ALL_OBJ_INDICES[hold_index].unsqueeze(0))
+                    self.scene['pancake_collection'].write_object_com_state_to_sim(pancake_object_state.view(1,1,-1), \
+                                                                            self.scene['pancake_collection']._ALL_ENV_INDICES[env_i].view(1), \
+                                                                            self.scene['pancake_collection']._ALL_OBJ_INDICES[hold_index].view(1))
                     self.scene['pancake_collection'].reset() 
 
 
