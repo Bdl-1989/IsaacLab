@@ -29,10 +29,10 @@ gym.register(
 )
 gym.register(
     id="Isaac-Pick-And-Place-Direct-v0",
-    entry_point=f"{__name__}.pick_and_place_env:PickAndPlaceEnv",
+    entry_point=f"{__name__}.pick_and_place_env_2:PickAndPlaceEnv",
     disable_env_checker=True,
     kwargs={ 
-        "env_cfg_entry_point": f"{__name__}.pick_and_place_env:PickAndPlaceEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.pick_and_place_env_2:PickAndPlaceEnvCfg",
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml", 
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
     },

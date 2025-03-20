@@ -232,7 +232,7 @@ def move_conveyor(i):
  
 
 pick_place_time_consumption = 0.8 # s, commented by Micheal, 3/13/2025
-deltaT = pick_place_time_consumption / 10
+deltaT = pick_place_time_consumption / 8
 
 # value only from 0 to 1
 # final target, 2 in container, 3 for stacked
@@ -313,7 +313,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
         self.pick_workarea_1_movement = torch.zeros(self.scene.num_envs, 2)
         self.pick_workarea_1_movement[:,1] -= 1 # for holding pancake index
 
- 
+        
         # y
         # ^
         # |
@@ -341,12 +341,12 @@ class PickAndPlaceEnv(DirectMARLEnv):
             high=np.array([-2.5, 0.2]), 
             dtype=np.float32
         )
-        self.place_relative_array = spaces.Box(
-            low=0,  # empty
-            high=1,  # place
-            shape=(2, 1),  # shape
-            dtype=np.int32  # discrete
-        )
+ 
+
+        self.pick_encoder = PointNetEncoder(feature_dim=64,   x_min=self.pick_workarea_1_boundaries.low[0] \
+                                                            , x_max=self.pick_workarea_1_boundaries.high[0] \
+                                                            , y_min=self.pick_workarea_1_boundaries.low[1] \
+                                                            , y_max=self.pick_workarea_1_boundaries.high[1])
 
         self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
         self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
@@ -562,7 +562,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
 
     def _apply_action(self) -> None:
 
-        self._pick_and_place()
+        # self._pick_and_place()
 
 
         self.robot.set_joint_effort_target(
@@ -572,64 +572,31 @@ class PickAndPlaceEnv(DirectMARLEnv):
             self.actions["pendulum"] * self.cfg.pendulum_action_scale, joint_ids=self._pendulum_dof_idx
         )
 
-
-    def _represent_state(self,xy_pos, grid_size=(5, 5)):
-        """
-        将 xy_pos 转换为固定维度的状态表示。
-        输入:
-            xy_pos: Tensor, 形状为 (env, num_points, 2)
-            grid_size: 网格大小，例如 (10, 10)
-        输出:
-            state_vectors: Tensor, 形状为 (env, state_dim)
-        """
-        env, num_points, _ = xy_pos.shape
-        grid_x, grid_y = grid_size
-        state_vectors = []
-
-        for env_idx in range(env):
-            # 获取当前环境的点
-            points = xy_pos[env_idx]  # 形状为 (num_points, 2)
-
-            # 初始化网格
-            grid = torch.zeros(grid_x, grid_y)
-
-            # 统计网格内点数
-            for x, y in points:
-                i = int(x * grid_x)
-                j = int(y * grid_y)
-                if 0 <= i < grid_x and 0 <= j < grid_y:
-                    grid[i, j] += 1
-
-            # 归一化为密度
-            if num_points > 0:
-                grid_density = grid / num_points
-            else:
-                grid_density = grid
-
-            # 计算附加特征
-            total_points = num_points
-            centroid = torch.mean(points, dim=0) if num_points > 0 else torch.tensor([0.5, 0.5])
-
-            # 拼接特征向量
-            grid_flat = grid_density.flatten()
-            features = torch.cat([grid_flat, torch.tensor([total_points]), centroid])
-            state_vectors.append(features)
-
-        # 将列表转换为 Tensor
-        state_vectors = torch.stack(state_vectors)  # 形状为 (env, state_dim)
-        return state_vectors
-
-
-
+ 
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
 
 
+        # whether the obs need the future deltaT???
+        # it seems no, next loop will immediately happen
 
 
-
-
-
+        pancakes_xy_pos = self.scene['pancake_collection'].data.object_com_pos_w[:,:,:2]
+        pancakes_xy_pos -= self.scene.env_origins[:, None, :2]
+ 
+        
+        # 使用 self.pick_workarea_1_boundaries 的边界值
+        pick_workarea_1 = (
+            (pancakes_xy_pos[:, :, 0] > self.pick_workarea_1_boundaries.low[0]) & 
+            (pancakes_xy_pos[:, :, 0] < self.pick_workarea_1_boundaries.high[0]) & 
+            (pancakes_xy_pos[:, :, 1] > self.pick_workarea_1_boundaries.low[1]) & 
+            (pancakes_xy_pos[:, :, 1] < self.pick_workarea_1_boundaries.high[1])
+        )
+        pick_features = torch.zeros(self.scene.num_envs,self.pick_encoder.get_feature_dim())
+        for env_i in range(self.scene.num_envs):
+            indices=torch.nonzero(pick_workarea_1[env_i]).squeeze()
+            positions = self.scene['pancake_collection'].data.object_com_pos_w[env_i,indices,:2].clone()
+            pick_features[env_i] = self.pick_encoder(positions)
 
 
 
@@ -654,6 +621,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
                 ),
                 dim=-1,
             ),
+            # "pickmaster": torch.zeros(4,1)
         }
         return observations
 
@@ -763,3 +731,64 @@ def compute_rewards(
         "pendulum": rew_alive + rew_termination + rew_pendulum_pos + rew_pendulum_vel,
     }
     return total_reward
+
+
+
+
+import torch.nn as nn
+
+
+class PointNetEncoder(nn.Module):
+    def __init__(self, feature_dim=64, x_min=0, x_max=1, y_min=0, y_max=1):
+        super(PointNetEncoder, self).__init__()
+        # 共享 MLP
+        self.x_min = x_min
+        self.x_max = x_max
+        self.y_min = y_min
+        self.y_max = y_max
+        self.feature_dim = feature_dim
+        self.mlp = nn.Sequential(
+            nn.Linear(2, 64),  # 输入是 2D 坐标 (x, y)
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+        )
+        # 最大池化
+        self.pool = nn.AdaptiveMaxPool1d(1)
+        # 输出层
+        self.output_layer = nn.Linear(64, feature_dim)
+
+    def forward(self, x):
+        """
+        输入:
+        x: Tensor, 形状为 (num_points, 2)
+        输出:
+        features: Tensor, 形状为 (feature_dim,)
+        """
+        if len(x) == 0:
+            # 如果 x 为空列表，返回形状为 (feature_dim,) 的全零张量
+            return torch.zeros(self.feature_dim)
+        num_points, _ = x.shape
+
+        device = x.device
+        self.mlp = self.mlp.to(device)
+        self.pool = self.pool.to(device)
+        self.output_layer = self.output_layer.to(device)
+
+        # Min-Max 归一化
+        x[:, 0] = (x[:, 0] - self.x_min) / (self.x_max - self.x_min)
+        x[:, 1] = (x[:, 1] - self.y_min) / (self.y_max - self.y_min)
+
+        x = x.view(-1, 2)  # 展平为 (num_points, 2)
+        x = self.mlp(x)  # 形状为 (num_points, 64)
+        x = x.view(1, num_points, -1)  # 增加批次维度，形状为 (1, num_points, 64)
+        x = x.permute(0, 2, 1)  # 形状为 (1, 64, num_points)
+        x = self.pool(x)  # 形状为 (1, 64, 1)
+        x = x.squeeze(-1)  # 形状为 (1, 64)
+        x = self.output_layer(x)  # 形状为 (1, feature_dim)
+        x = x.squeeze(0)  # 移除批次维度，形状为 (feature_dim,)
+
+        return x
+    
+    def get_feature_dim(self):
+        return self.feature_dim
