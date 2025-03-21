@@ -70,12 +70,28 @@ class PointNetEncoder(nn.Module):
 
 # 创建模型
 # 创建一个形状为 (num_points, 2) 的输入
-num_points = 100
-x = torch.randn(num_points, 2)
+# num_points = 100
+# x = torch.randn(num_points, 2)
+
+# # 初始化模型
+# encoder = PointNetEncoder(feature_dim=64)
+
+# # 前向传播
+# features = encoder(x)
+# print(features.shape)  # 输出: torch.Size([64])
+
+# 创建两组输入
+x1 = torch.randn(3, 2)  # 3 个非零点
+x2 = torch.cat([x1, torch.full((6, 2), -1e10)], dim=0)  # 同样的 3 个点 + 6 个零
 
 # 初始化模型
 encoder = PointNetEncoder(feature_dim=64)
 
 # 前向传播
-features = encoder(x)
-print(features.shape)  # 输出: torch.Size([64])
+features1 = encoder(x1)
+features2 = encoder(x2)
+
+# 比较输出
+print("x1 的特征向量:", features1)
+print("x2 的特征向量:", features2)
+print("特征向量是否相同:", torch.allclose(features1, features2))

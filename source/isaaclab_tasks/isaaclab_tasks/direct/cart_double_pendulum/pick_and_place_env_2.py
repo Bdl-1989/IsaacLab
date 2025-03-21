@@ -232,7 +232,7 @@ def move_conveyor(i):
  
 
 pick_place_time_consumption = 0.8 # s, commented by Micheal, 3/13/2025
-deltaT = pick_place_time_consumption / 8
+deltaT = pick_place_time_consumption 
 
 # value only from 0 to 1
 # final target, 2 in container, 3 for stacked
@@ -247,12 +247,12 @@ class PickAndPlaceEnvCfg(DirectMARLEnvCfg):
     # env
     decimation =16
     episode_length_s = 5.0
-    # possible_agents = ["cart", "pendulum","pickmaster"]
-    # action_spaces = {"cart": 1, "pendulum": 1,"pickmaster":6}  # pick_x, pick_y, pickorwait, place_x, place_y, placeorwait
-    # observation_spaces = {"cart": 4, "pendulum": 3,"pickmaster":0}
-    possible_agents = ["cart", "pendulum"]
-    action_spaces = {"cart": 1, "pendulum": 1}
-    observation_spaces = {"cart": 4, "pendulum": 3}
+    possible_agents = ["cart", "pendulum","pickmaster"]
+    action_spaces = {"cart": 1, "pendulum": 1,"pickmaster":6}  # pick_x, pick_y,  place_x, place_y, placeorwait
+    observation_spaces = {"cart": 4, "pendulum": 3,"pickmaster":64}
+    # possible_agents = ["cart", "pendulum"]
+    # action_spaces = {"cart": 1, "pendulum": 1}
+    # observation_spaces = {"cart": 4, "pendulum": 3}
     state_space = -1
 
     # simulation
@@ -343,7 +343,8 @@ class PickAndPlaceEnv(DirectMARLEnv):
         )
  
 
-        self.pick_encoder = PointNetEncoder(feature_dim=64,   x_min=self.pick_workarea_1_boundaries.low[0] \
+        self.pick_encoder = PointNetEncoder(feature_dim=64, device = device \
+                                                            , x_min=self.pick_workarea_1_boundaries.low[0] \
                                                             , x_max=self.pick_workarea_1_boundaries.high[0] \
                                                             , y_min=self.pick_workarea_1_boundaries.low[1] \
                                                             , y_max=self.pick_workarea_1_boundaries.high[1])
@@ -581,7 +582,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
         # it seems no, next loop will immediately happen
 
 
-        pancakes_xy_pos = self.scene['pancake_collection'].data.object_com_pos_w[:,:,:2]
+        pancakes_xy_pos = self.scene['pancake_collection'].data.object_com_pos_w[:,:,:2].clone()
         pancakes_xy_pos -= self.scene.env_origins[:, None, :2]
  
         
@@ -592,10 +593,16 @@ class PickAndPlaceEnv(DirectMARLEnv):
             (pancakes_xy_pos[:, :, 1] > self.pick_workarea_1_boundaries.low[1]) & 
             (pancakes_xy_pos[:, :, 1] < self.pick_workarea_1_boundaries.high[1])
         )
-        pick_features = torch.zeros(self.scene.num_envs,self.pick_encoder.get_feature_dim())
+        pick_features = torch.zeros(self.scene.num_envs,self.pick_encoder.get_feature_dim(),device=device)
         for env_i in range(self.scene.num_envs):
             indices=torch.nonzero(pick_workarea_1[env_i]).squeeze()
-            positions = self.scene['pancake_collection'].data.object_com_pos_w[env_i,indices,:2].clone()
+            #     # 随机丢弃一项
+            # if len(indices) > 1:  # 确保至少有两项可以丢弃
+            #     drop_index = torch.randint(0, len(indices), (1,)).item()
+            #     indices = torch.cat([indices[:drop_index], indices[drop_index+1:]])
+            
+                    
+            positions = pancakes_xy_pos[env_i,indices].clone()
             pick_features[env_i] = self.pick_encoder(positions)
 
 
@@ -621,7 +628,7 @@ class PickAndPlaceEnv(DirectMARLEnv):
                 ),
                 dim=-1,
             ),
-            # "pickmaster": torch.zeros(4,1)
+            "pickmaster": pick_features
         }
         return observations
 
@@ -729,6 +736,7 @@ def compute_rewards(
     total_reward = {
         "cart": rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel,
         "pendulum": rew_alive + rew_termination + rew_pendulum_pos + rew_pendulum_vel,
+        "pickmaster": 0
     }
     return total_reward
 
@@ -739,24 +747,32 @@ import torch.nn as nn
 
 
 class PointNetEncoder(nn.Module):
-    def __init__(self, feature_dim=64, x_min=0, x_max=1, y_min=0, y_max=1):
+    def __init__(self, feature_dim=64, device='cuda:0', x_min=0, x_max=1, y_min=0, y_max=1):
         super(PointNetEncoder, self).__init__()
-        # 共享 MLP
-        self.x_min = x_min
-        self.x_max = x_max
-        self.y_min = y_min
-        self.y_max = y_max
+
+        self.x_min, self.x_max = x_min, x_max
+        self.y_min, self.y_max = y_min, y_max
         self.feature_dim = feature_dim
+
+        # Shared MLP
         self.mlp = nn.Sequential(
-            nn.Linear(2, 64),  # 输入是 2D 坐标 (x, y)
+            nn.Linear(2, 64),  # Input is 2D coordinates (x, y)
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
         )
-        # 最大池化
+
+        # Max Pooling
         self.pool = nn.AdaptiveMaxPool1d(1)
-        # 输出层
+
+        # Output layer
         self.output_layer = nn.Linear(64, feature_dim)
+
+        # Move to device
+        self.to(device)
+
+
+
 
     def forward(self, x):
         """
@@ -770,10 +786,6 @@ class PointNetEncoder(nn.Module):
             return torch.zeros(self.feature_dim)
         num_points, _ = x.shape
 
-        device = x.device
-        self.mlp = self.mlp.to(device)
-        self.pool = self.pool.to(device)
-        self.output_layer = self.output_layer.to(device)
 
         # Min-Max 归一化
         x[:, 0] = (x[:, 0] - self.x_min) / (self.x_max - self.x_min)
